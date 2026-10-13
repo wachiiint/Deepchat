@@ -1,2 +1,4 @@
-deepchat/target
-deepchat/Cargo.lock
+# rust
+target/
+Cargo.lock
+

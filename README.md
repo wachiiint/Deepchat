@@ -1,13 +1,19 @@
-# Hello
+# Deepchat
+## Description
+Minial chat \
+Client-Server \
+GUI \
+TCP, Socket Programming \
 
 ## Getting start
 ```bash
-cd deepchat
+cd server
 cargo --version 
 
 # build
 cargo build
-./target/debug/hello
+./target/debug/server
+.\target\debug\server.exe #or windows
 
 # run
 cargo run
