@@ -48,6 +48,10 @@ impl State {
         self.conns.get(&id)?.name.as_deref()
     }
 
+    pub fn id_of(&self, name: &str) -> Option<ConnId> {
+        self.names.get(name).copied()
+    }
+
     /// Registered names, sorted so every client shows the same order.
     pub fn names(&self) -> Vec<String> {
         let mut v: Vec<String> = self.names.keys().cloned().collect();

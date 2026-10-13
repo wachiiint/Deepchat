@@ -38,6 +38,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
 
     match msg {
         ClientMsg::Register { .. } | ClientMsg::Pong => {}
+        ClientMsg::Dm { to, text } => dm(state, id, me, to, text),
         other => println!("{me}: not implemented yet: {other:?}"),
     }
 }
@@ -50,6 +51,19 @@ fn register(state: &mut State, id: ConnId, name: String) {
         }
         Err(kind) => state.send(id, ServerMsg::Error { kind }),
     }
+}
+
+// only sender and receiver get it; the sender's copy confirms delivery
+fn dm(state: &State, from_id: ConnId, from: String, to: String, text: String) {
+    let Some(to_id) = state.id_of(&to) else {
+        state.send(from_id, ServerMsg::Error { kind: ErrorKind::UnknownUser });
+        return;
+    };
+    let msg = ServerMsg::Dm { from, to, text };
+    if to_id != from_id {
+        state.send(to_id, msg.clone());
+    }
+    state.send(from_id, msg);
 }
 
 fn broadcast_users(state: &State) {
