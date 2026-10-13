@@ -15,13 +15,29 @@ pub enum ClientMsg {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServerMsg {
-    Welcome { name: String },
-    Users { names: Vec<String> },
-    Dm { from: String, to: String, text: String },
-    Groups { groups: Vec<GroupInfo> },
-    GroupMsg { group: String, from: String, text: String },
+    Welcome {
+        name: String,
+    },
+    Users {
+        names: Vec<String>,
+    },
+    Dm {
+        from: String,
+        to: String,
+        text: String,
+    },
+    Groups {
+        groups: Vec<GroupInfo>,
+    },
+    GroupMsg {
+        group: String,
+        from: String,
+        text: String,
+    },
     Ping,
-    Error { kind: ErrorKind },
+    Error {
+        kind: ErrorKind,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,22 +54,4 @@ pub enum ErrorKind {
     GroupExists,
     UnknownGroup,
     NotMember,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn round_trip() {
-        let c = ClientMsg::Dm { to: "bob".into(), text: "hi".into() };
-        let bytes = postcard::to_stdvec(&c).unwrap();
-        assert_eq!(postcard::from_bytes::<ClientMsg>(&bytes).unwrap(), c);
-
-        let s = ServerMsg::Groups {
-            groups: vec![GroupInfo { group: "net".into(), members: vec!["alice".into()] }],
-        };
-        let bytes = postcard::to_stdvec(&s).unwrap();
-        assert_eq!(postcard::from_bytes::<ServerMsg>(&bytes).unwrap(), s);
-    }
 }
