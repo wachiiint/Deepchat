@@ -11,14 +11,14 @@ Raw TCP between clients and server. Framing/session stay separate from chat appl
 | Application | Chat behavior | register, user list, DM, groups, AI reply |
 
 ```text
-TCP bytes → Framer → Codec (Envelope) → Session → Hub → Connection registry
+TCP bytes → Framer → postcard (ClientMsg / ServerMsg) → Session → Hub → Connection registry
 ```
 
 ## Data flow
 
-1. **Envelope** — shared wire types (`Ping`/`Pong`, `Register`, user presence, `Dm`, group ops, errors).
+1. **Messages** — `ClientMsg` / `ServerMsg` in `server/src/protocol.rs`. Wire format: `docs/protocol.md`.
 2. **Per-connection task** — read frame → decode → handle session → send app messages to the hub.
-3. **Hub** — applies F1–F10 routing; writes outbound envelopes to recipients.
+3. **Hub** — applies F1–F10 routing; writes outbound `ServerMsg` to recipients.
 4. **Registry** — `name → Sender` (session state only).
 
 ## Feature → hub
@@ -50,10 +50,9 @@ No generic repository layer in v1. Add a narrow store trait later only if persis
 ```text
 server/src/
   main.rs           # bind, accept, spawn
-  protocol.rs       # Envelope, wire errors
+  protocol.rs       # ClientMsg, ServerMsg, ErrorKind
   net/
-    framer.rs       # framed byte read/write
-    codec.rs        # Envelope ↔ bytes
+    framer.rs       # length-prefixed frames + postcard encode/decode
   session.rs        # ping/pong, register, conn handle
   hub.rs            # users, dm, groups, fan-out
   state.rs          # in-memory users + groups
@@ -62,9 +61,7 @@ server/src/
 
 ## Open decisions
 
-1. Frame format: length-prefixed JSON vs newline-delimited JSON
-2. `Envelope` versioning (client ↔ server)
-3. Ping: app-level `Ping`/`Pong`, read timeout, or both
+1. Ping: app-level `Ping`/`Pong`, read timeout, or both
 
 ## v1 out of scope
 
