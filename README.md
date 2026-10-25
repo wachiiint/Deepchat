@@ -4,7 +4,7 @@ A multi-client chat application built with **TCP socket programming in Rust** an
 
 ## Overview
 
-Clients talk to a Rust TCP server; the desktop UI is Tauri (Svelte ↔ Rust via IPC). Chat traffic uses raw TCP sockets only. The server routes private and group messages and can run an AI chatbot in group rooms. Clients may run on different machines; the server can run on one of them or a third host.
+Clients talk to a Rust TCP server; the desktop UI is Tauri (Svelte ↔ Rust via IPC). Chat traffic uses raw TCP sockets only. The server routes private and group messages, runs an AI chatbot in group rooms, and relays typing indicators and read receipts. Clients may run on different machines; the server can run on one of them or a third host.
 
 ```
 ┌─────────────────────────────────┐         TCP          ┌─────────────────┐
@@ -29,6 +29,9 @@ Clients talk to a Rust TCP server; the desktop UI is Tauri (Svelte ↔ Rust via 
 | F8 | R10 | Join group | Clients join groups themselves; creators do not auto-add others. |
 | F9 | R11 | Group chat | Group messages are visible only to members of that group. |
 | F10 | Part 3 | AI group chatbot | An AI chatbot (e.g. OpenAI / Ollama) participates in group chat. |
+| F11 | Part 3 | Read / unread | Each room shows an unread count for messages you have not opened yet, and senders see when their messages have been read. |
+| F12 | Part 3 | Typing indicator | A room shows who is currently typing (private and group). |
+| F13 | Part 3 | Leave / delete group | A member can leave a group; the group's creator can delete it for everyone. |
 
 ## Getting started
 
