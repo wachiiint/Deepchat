@@ -70,7 +70,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::ClientMsg;
+    use crate::messages::ClientMsg;
     use tokio::io::duplex;
 
     // two frames back to back must come out as two separate messages

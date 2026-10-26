@@ -16,7 +16,7 @@ TCP bytes → Framer → postcard (ClientMsg / ServerMsg) → Session → Hub �
 
 ## Data flow
 
-1. **Messages** — `ClientMsg` / `ServerMsg` in `server/src/protocol.rs`. Wire format: `docs/protocol.md`.
+1. **Messages** — `ClientMsg` / `ServerMsg` in `protocol/src/messages.rs` (shared `protocol` crate). Wire format: `docs/protocol.md`.
 2. **Per-connection task** — read frame → decode → handle session → send app messages to the hub.
 3. **Hub** — applies F1–F10 routing; writes outbound `ServerMsg` to recipients.
 4. **Registry** — `name → Sender` (session state only).
@@ -48,11 +48,11 @@ No generic repository layer in v1. Add a narrow store trait later only if persis
 ## Layout
 
 ```text
+protocol/src/       # shared crate (server + client)
+  messages.rs       # ClientMsg, ServerMsg, GroupInfo, ErrorKind
+  framer.rs         # length-prefixed frames + postcard encode/decode
 server/src/
   main.rs           # bind, accept, spawn
-  protocol.rs       # ClientMsg, ServerMsg, ErrorKind
-  net/
-    framer.rs       # length-prefixed frames + postcard encode/decode
   session.rs        # ping/pong, register, conn handle
   hub.rs            # users, dm, groups, fan-out
   state.rs          # in-memory users + groups

@@ -6,9 +6,8 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 
 use crate::hub::Event;
-use crate::net::framer::{read_frame, write_frame};
-use crate::protocol::{ClientMsg, ServerMsg};
 use crate::state::ConnId;
+use protocol::{ClientMsg, ServerMsg, read_frame, write_frame};
 
 pub async fn run(stream: TcpStream, peer: SocketAddr, id: ConnId, hub: mpsc::Sender<Event>) {
     // send small frames immediately instead of letting Nagle batch them
