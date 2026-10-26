@@ -33,15 +33,15 @@ where
     W: AsyncWrite + Unpin,
     T: Serialize,
 {
-    let body: Vec<u8> = to_stdvec(msg).map_err(|e| FrameError::ErrorSerializationFailed(e))?;
+    let body: Vec<u8> = to_stdvec(msg).map_err(FrameError::ErrorSerializationFailed)?;
     if body.len() > MAX_FRAME as usize {
         return Err(FrameError::ErrorLenOutofScope(body.len() as u32));
     };
     let x: [u8; 4] = (body.len() as u32).to_be_bytes();
-    let frame: Vec<u8> = x.into_iter().chain(body.into_iter()).collect(); // concat array + vector in performance way
+    let frame: Vec<u8> = x.into_iter().chain(body).collect(); // concat array + vector in performance way
     w.write_all(&frame)
         .await
-        .map_err(|e| FrameError::ErrorWriteFail(e)) // write frame into stream
+        .map_err(FrameError::ErrorWriteFail) // write frame into stream
 }
 
 pub async fn read_frame<R, T>(r: &mut R) -> Result<Option<T>, FrameError>
@@ -62,7 +62,7 @@ where
     r.read_exact(&mut buf) // read from stream
         .await
         .map_err(FrameError::ErrorReadFail)?;
-    let out: T = from_bytes(&mut buf).map_err(FrameError::ErrorDeSerializationFailed)?; //decode into buffer
+    let out: T = from_bytes(&buf).map_err(FrameError::ErrorDeSerializationFailed)?; //decode into buffer
     Ok(Some(out)) //return
 }
 
