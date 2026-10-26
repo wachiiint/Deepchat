@@ -2,8 +2,8 @@
 
 use tokio::sync::mpsc;
 
-use crate::protocol::{ClientMsg, ErrorKind, ServerMsg};
 use crate::state::{ConnId, Outbox, State};
+use protocol::{ClientMsg, ErrorKind, ServerMsg};
 
 pub enum Event {
     Connect { id: ConnId, tx: Outbox },
@@ -31,7 +31,12 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
         // before a name is set, only Register is allowed
         match msg {
             ClientMsg::Register { name } => register(state, id, name),
-            _ => state.send(id, ServerMsg::Error { kind: ErrorKind::NotRegistered }),
+            _ => state.send(
+                id,
+                ServerMsg::Error {
+                    kind: ErrorKind::NotRegistered,
+                },
+            ),
         }
         return;
     };
@@ -56,7 +61,12 @@ fn register(state: &mut State, id: ConnId, name: String) {
 // only sender and receiver get it; the sender's copy confirms delivery
 fn dm(state: &State, from_id: ConnId, from: String, to: String, text: String) {
     let Some(to_id) = state.id_of(&to) else {
-        state.send(from_id, ServerMsg::Error { kind: ErrorKind::UnknownUser });
+        state.send(
+            from_id,
+            ServerMsg::Error {
+                kind: ErrorKind::UnknownUser,
+            },
+        );
         return;
     };
     let msg = ServerMsg::Dm { from, to, text };
@@ -67,5 +77,7 @@ fn dm(state: &State, from_id: ConnId, from: String, to: String, text: String) {
 }
 
 fn broadcast_users(state: &State) {
-    state.broadcast(&ServerMsg::Users { names: state.names() });
+    state.broadcast(&ServerMsg::Users {
+        names: state.names(),
+    });
 }

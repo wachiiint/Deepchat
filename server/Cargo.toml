@@ -4,6 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+protocol = { path = "../protocol" }
 tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "sync", "io-util", "time"] }
-serde = { version = "1", features = ["derive"] }
-postcard = { version = "1", features = ["use-std"] }

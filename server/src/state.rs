@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use tokio::sync::mpsc;
 
-use crate::protocol::{ErrorKind, ServerMsg};
+use protocol::{ErrorKind, ServerMsg};
 
 pub type ConnId = u64;
 pub type Outbox = mpsc::UnboundedSender<ServerMsg>;
