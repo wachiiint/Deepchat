@@ -2,10 +2,15 @@
 members = ["protocol", "server", "client/src-tauri"]
 resolver = "3"
 
-# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+# Default release profile: used by the server.
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = 3
-panic = "abort"
 strip = true
+
+# Tauri client only: smaller binary, panic aborts the app.
+# Build with: pnpm tauri build -- --profile release-client
+[profile.release-client]
+inherits = "release"
+panic = "abort"
