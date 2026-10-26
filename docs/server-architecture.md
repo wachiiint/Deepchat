@@ -45,6 +45,10 @@ F4 (chat UI) is client-side. Server delivers room-scoped messages only.
 
 No generic repository layer in v1. Add a narrow store trait later only if persistence is required.
 
+## Testing
+
+Hub logic is tested in-process, without sockets: `hub/tests.rs` drives `hub::apply` through `hub/testkit.rs` (`Harness` connects fake clients and `drain()` returns the `ServerMsg`s each received). New hub features should ship with tests written the same way.
+
 ## Layout
 
 ```text
@@ -55,6 +59,8 @@ server/src/
   main.rs           # bind, accept, spawn
   session.rs        # ping/pong, register, conn handle
   hub.rs            # users, dm, groups, fan-out
+  hub/testkit.rs    # cfg(test) harness: fake clients, drains ServerMsgs
+  hub/tests.rs      # cfg(test) hub behavior tests
   state.rs          # in-memory users + groups
   ai.rs             # AiClient + implementations
 ```
