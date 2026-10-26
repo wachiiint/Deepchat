@@ -1,5 +1,10 @@
 //! Single task that owns `State` and applies chat rules. Sessions talk to it via `Event`s.
 
+#[cfg(test)]
+mod testkit;
+#[cfg(test)]
+mod tests;
+
 use tokio::sync::mpsc;
 
 use crate::state::{ConnId, Outbox, State};
@@ -14,13 +19,18 @@ pub enum Event {
 pub async fn run(mut rx: mpsc::Receiver<Event>) {
     let mut state = State::default();
     while let Some(ev) = rx.recv().await {
-        match ev {
-            Event::Connect { id, tx } => state.connect(id, tx),
-            Event::Msg { id, msg } => handle(&mut state, id, msg),
-            Event::Disconnect { id } => {
-                if state.disconnect(id).is_some() {
-                    broadcast_users(&state);
-                }
+        apply(&mut state, ev);
+    }
+}
+
+/// One hub step. Synchronous so tests can drive it without a runtime (see `testkit`).
+fn apply(state: &mut State, ev: Event) {
+    match ev {
+        Event::Connect { id, tx } => state.connect(id, tx),
+        Event::Msg { id, msg } => handle(state, id, msg),
+        Event::Disconnect { id } => {
+            if state.disconnect(id).is_some() {
+                broadcast_users(state);
             }
         }
     }
