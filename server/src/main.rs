@@ -24,7 +24,13 @@ async fn main() -> std::io::Result<()> {
         match listener.accept().await {
             Ok((stream, peer)) => {
                 println!("+ {peer} connected");
-                tokio::spawn(session::run(stream, peer, next_id, hub_tx.clone()));
+                tokio::spawn(session::run(
+                    stream,
+                    peer,
+                    next_id,
+                    hub_tx.clone(),
+                    session::Liveness::DEFAULT,
+                ));
                 next_id += 1;
             }
             // e.g. out of file descriptors; skip this client, keep serving others

@@ -57,7 +57,7 @@ protocol/src/       # shared crate (server + client)
   framer.rs         # length-prefixed frames + postcard encode/decode
 server/src/
   main.rs           # bind, accept, spawn
-  session.rs        # ping/pong, register, conn handle
+  session.rs        # per-connection reader/writer, ping/pong liveness
   hub.rs            # users, dm, groups, fan-out
   hub/testkit.rs    # cfg(test) harness: fake clients, drains ServerMsgs
   hub/tests.rs      # cfg(test) hub behavior tests
@@ -65,9 +65,21 @@ server/src/
   ai.rs             # AiClient + implementations
 ```
 
-## Open decisions
+## Liveness
 
-1. Ping: app-level `Ping`/`Pong`, read timeout, or both
+App-level `Ping`/`Pong` plus a read timeout, both in `session.rs` (`Liveness::DEFAULT`).
+
+| Rule | Value |
+|------|-------|
+| Server sends `Ping` | every 10 s |
+| Client replies `Pong` | the session consumes it; the hub never sees it |
+| Server drops a client that sends no frame | after 30 s (any frame counts, not only `Pong`) |
+
+A dropped client goes through the normal disconnect path, so its name is freed and the others see it leave the user list.
+
+The timeout is what detects a dead peer. Alone it would kick healthy idle clients, so `Ping` gives them something to send. The 30 s is 3× the ping interval so one lost `Pong` doesn't kick anyone. WebSocket defines ping/pong but no timings, so these are our own starting values; change them in `Liveness::DEFAULT`.
+
+Clients MUST answer every `Ping`, or they are dropped after 30 s idle.
 
 ## v1 out of scope
 
