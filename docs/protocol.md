@@ -47,4 +47,4 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 | DM delivery | Sent to both sender and receiver |
 | DM room id | Sorted pair of names, e.g. `alice` + `bob` → `alice\|bob`; derived by each client |
 | Group delivery | Sent to group members only |
-| Liveness | Server sends `Ping`; client replies `Pong` |
+| Liveness | Server sends `Ping` periodically; client replies `Pong`. Server closes a connection that goes silent. Timings: `server-architecture.md` |
