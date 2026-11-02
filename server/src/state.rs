@@ -79,7 +79,9 @@ impl State {
         groups
     }
 
-    /// Remove memberships, dropping all state owned by an emptied group.
+    /// Removes `name` from every group and deletes groups left empty.
+    /// Returns `true` if `name` was in at least one group, i.e. the group list changed
+    /// and clients need a fresh `Groups` push.
     pub fn remove_member(&mut self, name: &str) -> bool {
         let mut changed = false;
         self.groups.retain(|_, group| {
