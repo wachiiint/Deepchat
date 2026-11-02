@@ -9,8 +9,8 @@ use std::{
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::io::AsyncWriteExt;
 use tokio::{
+    io::AsyncWriteExt,
     net::{TcpStream, tcp::OwnedWriteHalf},
     sync::Mutex as AsyncMutex,
     task::JoinHandle,
@@ -172,6 +172,8 @@ impl Model {
 }
 
 impl Connection {
+    /// Connects and registers `name`. Returns once the server has sent `Welcome` and the
+    /// first group list; anything else received meanwhile is replayed through `Model::apply`.
     pub async fn connect(
         host: &str,
         port: u16,
@@ -183,6 +185,8 @@ impl Connection {
             .map_err(|_| "Connection timed out".to_string())?
             .map_err(|e| e.to_string())?;
         socket.set_nodelay(true).map_err(|e| e.to_string())?;
+
+        // registration handshake: Register, then wait for Welcome and the first group list
         let mut buffered = Vec::new();
         let snapshot = timeout(LIMIT, async {
             write_frame(&mut socket, &ClientMsg::Register { name: name.clone() })
@@ -222,15 +226,20 @@ impl Connection {
         })
         .await
         .map_err(|_| "Registration timed out".to_string())??;
+
         let model = Arc::new(Mutex::new(Model {
             snapshot: snapshot.clone(),
             messages: HashMap::new(),
             peers: HashMap::new(),
             next_id: 0,
         }));
+
+        // frames that arrived during the handshake are replayed, not lost
         for msg in buffered {
             model.lock().map_err(|e| e.to_string())?.apply(msg, &notify);
         }
+
+        // from here on the reader task owns the read half
         let (mut rd, wr) = socket.into_split();
         let writer = Arc::new(AsyncMutex::new(wr));
         let alive = Arc::new(AtomicBool::new(true));
@@ -263,6 +272,7 @@ impl Connection {
             reader_alive.store(false, Ordering::Release);
             notify(Update::Disconnected(reason));
         });
+
         Ok((
             Self {
                 model,
@@ -303,6 +313,7 @@ impl Connection {
             .users
             .clone())
     }
+
     pub fn groups(&self) -> Result<Vec<Group>, String> {
         Ok(self
             .model
@@ -312,6 +323,7 @@ impl Connection {
             .groups
             .clone())
     }
+
     pub fn open_private(&self, peer: &str) -> Result<String, String> {
         let mut model = self.model.lock().map_err(|e| e.to_string())?;
         if peer == model.snapshot.name || !model.snapshot.users.iter().any(|n| n == peer) {
@@ -321,6 +333,7 @@ impl Connection {
         model.peers.insert(id.clone(), peer.to_owned());
         Ok(id)
     }
+
     pub fn outgoing(&self, room: &str, text: String) -> Result<ClientMsg, String> {
         let model = self.model.lock().map_err(|e| e.to_string())?;
         if let Some(peer) = model.peers.get(room) {
@@ -343,6 +356,7 @@ impl Connection {
             text,
         })
     }
+
     pub fn messages(&self, room: &str) -> Result<Vec<Message>, String> {
         let model = self.model.lock().map_err(|e| e.to_string())?;
         if room.starts_with("group:")
