@@ -46,7 +46,6 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 |-------|------|
 | User list | Server pushes `Users` to everyone on each connect/disconnect — no request needed |
 | DM delivery | Sent to both sender and receiver |
-| DM room id | Sorted pair of names, e.g. `alice` + `bob` → `alice\|bob`; derived by each client |
 | Group delivery | Sent to group members only, including the sender |
 | Group list | Pushed to every registered client after every group change; `ListGroups` replies only to its requester |
 | Group membership | Creator starts as the only member; others join with `JoinGroup`. `LeaveGroup` or disconnect removes membership (never restored on reconnect). A group with no members is deleted and its name can be reused. `creator` never changes, even if the creator leaves |
