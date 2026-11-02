@@ -4,18 +4,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClientMsg {
+    Pong,
     Register { name: String },
     Dm { to: String, text: String },
     CreateGroup { group: String },
     ListGroups,
     JoinGroup { group: String },
     GroupMsg { group: String, text: String },
-    Pong,
     LeaveGroup { group: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServerMsg {
+    Ping,
     Welcome {
         name: String,
     },
@@ -35,7 +36,6 @@ pub enum ServerMsg {
         from: String,
         text: String,
     },
-    Ping,
     Error {
         kind: ErrorKind,
     },
