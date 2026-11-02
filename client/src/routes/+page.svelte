@@ -36,10 +36,17 @@
   function updateGroups(next: Group[]) {
     groupsRevision++;
     groups = next;
-    if (activeRoom?.kind === "group" && !next.some((g) => g.id === activeRoom?.id && g.members.includes(currentUser))) {
+    if (
+      activeRoom?.kind === "group" &&
+      !next.some(
+        (g) => g.id === activeRoom?.id && g.members.includes(currentUser),
+      )
+    ) {
       closeRoom();
     }
-    const joined = next.find((g) => g.name === pendingGroup && g.members.includes(currentUser));
+    const joined = next.find(
+      (g) => g.name === pendingGroup && g.members.includes(currentUser),
+    );
     if (joined) {
       pendingGroup = null;
       void selectGroup(joined);
@@ -52,7 +59,9 @@
     listenersReady = (async () => {
       const offs = await Promise.all([
         chatApi.onUsersUpdated((next) => {
-          usersRevision++; users = next;
+          usersRevision++;
+
+          users = next;
         }),
         chatApi.onGroupsUpdated((next) => {
           updateGroups(next);
@@ -125,7 +134,8 @@
     const history = await chatApi.getMessages(roomId);
     if (activeRoom?.id === roomId) {
       const byId = new Map(history.map((message) => [message.id, message]));
-      for (const message of messages) if (message.roomId === roomId) byId.set(message.id, message);
+      for (const message of messages)
+        if (message.roomId === roomId) byId.set(message.id, message);
       messages = [...byId.values()];
     }
   }
@@ -139,7 +149,8 @@
       selectedPeer = peer;
       selectedGroupId = null;
       activeRoom = { id: roomId, kind: "private", title: peer };
-      messages = []; await loadMessages(roomId);
+      messages = [];
+      await loadMessages(roomId);
     } catch (e) {
       error = String(e);
     } finally {
@@ -158,7 +169,8 @@
       selectedGroupId = group.id;
       selectedPeer = null;
       activeRoom = { id: group.id, kind: "group", title: group.name };
-      messages = []; await loadMessages(group.id);
+      messages = [];
+      await loadMessages(group.id);
     } catch (e) {
       error = String(e);
     } finally {
@@ -211,7 +223,11 @@
 
   async function handleLeaveGroup(groupId: string) {
     error = "";
-    try { await chatApi.leaveGroup(groupId); } catch (e) { error = String(e); }
+    try {
+      await chatApi.leaveGroup(groupId);
+    } catch (e) {
+      error = String(e);
+    }
   }
 
   async function handleDisconnect() {
@@ -219,8 +235,12 @@
       await chatApi.disconnect();
       connected = false;
       closeRoom();
-      groups = []; users = []; pendingGroup = null;
-    } catch (e) { error = String(e); }
+      groups = [];
+      users = [];
+      pendingGroup = null;
+    } catch (e) {
+      error = String(e);
+    }
   }
 </script>
 
@@ -235,12 +255,7 @@
         <button type="button" onclick={handleDisconnect}>Disconnect</button>
       </div>
       <div class="lists">
-        <UserList
-          {users}
-          {currentUser}
-          {selectedPeer}
-          onselect={selectUser}
-        />
+        <UserList {users} {currentUser} {selectedPeer} onselect={selectUser} />
         <GroupList
           {groups}
           {currentUser}
@@ -274,9 +289,7 @@
     grid-template-columns: minmax(240px, 300px) 1fr;
     height: 100vh;
     min-height: 0;
-    background:
-      linear-gradient(180deg, #efeae1 0%, #f3f0ea 40%),
-      #f3f0ea;
+    background: linear-gradient(180deg, #efeae1 0%, #f3f0ea 40%), #f3f0ea;
   }
 
   .sidebar {

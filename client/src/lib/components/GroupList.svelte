@@ -39,8 +39,14 @@
   </header>
 
   <form class="create" onsubmit={handleCreate}>
-    <input bind:value={newGroupName} aria-label="New group name" placeholder="New group name" disabled={busy} />
-    <button type="submit" disabled={busy || !newGroupName.trim()}>Create</button>
+    <input
+      bind:value={newGroupName}
+      aria-label="New group name"
+      placeholder="New group name"
+      disabled={busy}
+    />
+    <button type="submit" disabled={busy || !newGroupName.trim()}>Create</button
+    >
   </form>
 
   <ul>
@@ -64,11 +70,21 @@
           <span class="members">{group.members.join(", ")}</span>
         </button>
         {#if !isMember}
-          <button type="button" class="join" disabled={busy} onclick={() => onjoin(group.id)}>
+          <button
+            type="button"
+            class="join"
+            disabled={busy}
+            onclick={() => onjoin(group.id)}
+          >
             Join
           </button>
         {:else}
-          <button type="button" class="join" disabled={busy} onclick={() => onleave(group.id)}>Leave</button>
+          <button
+            type="button"
+            class="join"
+            disabled={busy}
+            onclick={() => onleave(group.id)}>Leave</button
+          >
         {/if}
       </li>
     {:else}
@@ -166,7 +182,9 @@
     gap: 0.2rem;
   }
 
-  .group:disabled { cursor: default; }
+  .group:disabled {
+    cursor: default;
+  }
 
   .group:hover:not(:disabled) {
     background: #ebe6dc;
