@@ -1,10 +1,10 @@
 //! In-memory server state. Owned by the hub task only, so no locks.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use tokio::sync::mpsc;
 
-use protocol::{ErrorKind, ServerMsg};
+use protocol::{ErrorKind, GroupInfo, ServerMsg};
 
 pub type ConnId = u64;
 pub type Outbox = mpsc::UnboundedSender<ServerMsg>;
@@ -14,10 +14,16 @@ struct Conn {
     name: Option<String>, // None until Register succeeds
 }
 
+pub struct Group {
+    pub creator: String,
+    pub members: BTreeSet<String>,
+}
+
 #[derive(Default)]
 pub struct State {
     conns: HashMap<ConnId, Conn>,
     names: HashMap<String, ConnId>,
+    pub groups: HashMap<String, Group>,
 }
 
 impl State {
@@ -57,6 +63,30 @@ impl State {
         let mut v: Vec<String> = self.names.keys().cloned().collect();
         v.sort();
         v
+    }
+
+    pub fn group_list(&self) -> Vec<GroupInfo> {
+        let mut groups: Vec<_> = self
+            .groups
+            .iter()
+            .map(|(name, group)| GroupInfo {
+                group: name.clone(),
+                creator: group.creator.clone(),
+                members: group.members.iter().cloned().collect(),
+            })
+            .collect();
+        groups.sort_by(|a, b| a.group.cmp(&b.group));
+        groups
+    }
+
+    /// Remove memberships, dropping all state owned by an emptied group.
+    pub fn remove_member(&mut self, name: &str) -> bool {
+        let mut changed = false;
+        self.groups.retain(|_, group| {
+            changed |= group.members.remove(name);
+            !group.members.is_empty()
+        });
+        changed
     }
 
     pub fn send(&self, id: ConnId, msg: ServerMsg) {

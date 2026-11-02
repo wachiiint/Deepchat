@@ -7,14 +7,12 @@
     currentUser = "",
     busy = false,
     onsend,
-    onsimulate,
   }: {
     room?: ActiveRoom | null;
     messages?: Message[];
     currentUser?: string;
     busy?: boolean;
-    onsend: (text: string) => void | Promise<void>;
-    onsimulate: () => void | Promise<void>;
+    onsend: (text: string) => Promise<boolean>;
   } = $props();
 
   let draft = $state("");
@@ -31,8 +29,7 @@
     event.preventDefault();
     const text = draft.trim();
     if (!text || !room) return;
-    await onsend(text);
-    draft = "";
+    if (await onsend(text)) draft = "";
   }
 
   function formatTime(ts: number): string {
@@ -55,9 +52,6 @@
         <p class="kind">{room.kind === "private" ? "Private" : "Group"}</p>
         <h2>{room.title}</h2>
       </div>
-      <button type="button" class="sim" onclick={() => onsimulate()} disabled={busy}>
-        Simulate incoming
-      </button>
     </header>
 
     <div class="window" bind:this={windowEl}>
@@ -77,6 +71,7 @@
     <form class="composer" onsubmit={handleSend}>
       <input
         bind:value={draft}
+        aria-label="Message"
         placeholder="Type a message…"
         disabled={busy}
         autocomplete="off"
@@ -133,25 +128,6 @@
   h2 {
     margin: 0.1rem 0 0;
     font-size: 1.1rem;
-  }
-
-  .sim {
-    border: 1px solid #cfc8bc;
-    background: #fff;
-    padding: 0.45rem 0.7rem;
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .sim:hover:not(:disabled) {
-    border-color: #2f6f5e;
-  }
-
-  .sim:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .window {

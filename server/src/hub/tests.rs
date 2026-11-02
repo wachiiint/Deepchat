@@ -212,3 +212,200 @@ async fn run_applies_events_in_order() {
     assert_eq!(rx.recv().await, Some(welcome("a")));
     assert_eq!(rx.recv().await, Some(users(&["a"])));
 }
+
+// --- Groups ---
+
+fn groups(entries: &[(&str, &str, &[&str])]) -> ServerMsg {
+    ServerMsg::Groups {
+        groups: entries
+            .iter()
+            .map(|(name, creator, members)| protocol::GroupInfo {
+                group: (*name).into(),
+                creator: (*creator).into(),
+                members: members.iter().map(|s| s.to_string()).collect(),
+            })
+            .collect(),
+    }
+}
+
+fn create(group: &str) -> ClientMsg {
+    ClientMsg::CreateGroup {
+        group: group.into(),
+    }
+}
+fn join_group(group: &str) -> ClientMsg {
+    ClientMsg::JoinGroup {
+        group: group.into(),
+    }
+}
+fn leave(group: &str) -> ClientMsg {
+    ClientMsg::LeaveGroup {
+        group: group.into(),
+    }
+}
+fn say(group: &str, text: &str) -> ClientMsg {
+    ClientMsg::GroupMsg {
+        group: group.into(),
+        text: text.into(),
+    }
+}
+
+#[test]
+fn create_broadcasts_creator_only_and_duplicate_is_rejected() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    let mut idle = h.connect();
+    h.send(&a, create("g1"));
+    let expected = groups(&[("g1", "a", &["a"])]);
+    for client in [&mut a, &mut b, &mut c] {
+        assert_eq!(client.drain(), [expected.clone()]);
+    }
+    idle.assert_silent();
+    h.send(&b, create("g1"));
+    assert_eq!(b.drain(), [error(ErrorKind::GroupExists)]);
+    a.assert_silent();
+    c.assert_silent();
+}
+
+#[test]
+fn joining_is_explicit_sorted_and_idempotent() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&b, create("g1"));
+    a.drain();
+    b.drain();
+    c.drain();
+    h.send(&a, join_group("g1"));
+    let expected = groups(&[("g1", "b", &["a", "b"])]);
+    for client in [&mut a, &mut b, &mut c] {
+        assert_eq!(client.drain(), [expected.clone()]);
+    }
+    h.send(&a, join_group("g1"));
+    a.assert_silent();
+    b.assert_silent();
+    c.assert_silent();
+}
+
+#[test]
+fn list_groups_is_sorted_and_only_replies_to_requester() {
+    let mut h = Harness::default();
+    let [mut a, mut b] = h.join(["a", "b"]);
+    h.send(&a, create("z"));
+    h.send(&b, create("a"));
+    a.drain();
+    b.drain();
+    h.send(&a, ClientMsg::ListGroups);
+    assert_eq!(
+        a.drain(),
+        [groups(&[("a", "b", &["b"]), ("z", "a", &["a"])])]
+    );
+    b.assert_silent();
+    let mut newcomer = h.register("new");
+    newcomer.drain();
+    h.send(&newcomer, ClientMsg::ListGroups);
+    assert_eq!(
+        newcomer.drain(),
+        [groups(&[("a", "b", &["b"]), ("z", "a", &["a"])])]
+    );
+}
+
+#[test]
+fn messages_reach_only_members_including_sender() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    a.drain();
+    b.drain();
+    c.drain();
+    h.send(&a, say("g1", "hello"));
+    let msg = ServerMsg::GroupMsg {
+        group: "g1".into(),
+        from: "a".into(),
+        text: "hello".into(),
+    };
+    assert_eq!(a.drain(), [msg.clone()]);
+    assert_eq!(b.drain(), [msg]);
+    c.assert_silent();
+    h.send(&c, say("g1", "intrusion"));
+    assert_eq!(c.drain(), [error(ErrorKind::NotMember)]);
+    a.assert_silent();
+    b.assert_silent();
+}
+
+#[test]
+fn unknown_groups_and_unregistered_commands_are_rejected() {
+    let mut h = Harness::default();
+    let [mut a] = h.join(["a"]);
+    for msg in [
+        join_group("missing"),
+        leave("missing"),
+        say("missing", "hi"),
+    ] {
+        h.send(&a, msg);
+        assert_eq!(a.drain(), [error(ErrorKind::UnknownGroup)]);
+    }
+    let mut idle = h.connect();
+    for msg in [
+        create("g1"),
+        join_group("g1"),
+        leave("g1"),
+        ClientMsg::ListGroups,
+    ] {
+        h.send(&idle, msg);
+        assert_eq!(idle.drain(), [error(ErrorKind::NotRegistered)]);
+    }
+}
+
+#[test]
+fn disconnect_removes_all_memberships_deletes_empty_groups_and_allows_reuse() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("shared"));
+    h.send(&a, create("alone"));
+    h.send(&b, join_group("shared"));
+    a.drain();
+    b.drain();
+    c.drain();
+    h.disconnect(&a);
+    let expected = [users(&["b", "c"]), groups(&[("shared", "a", &["b"])])];
+    assert_eq!(b.drain(), expected);
+    assert_eq!(c.drain(), expected);
+    let mut a2 = h.register("a");
+    a2.drain();
+    b.drain();
+    c.drain();
+    h.send(&a2, say("shared", "hi"));
+    assert_eq!(a2.drain(), [error(ErrorKind::NotMember)]);
+    h.disconnect(&b);
+    assert_eq!(c.drain(), [users(&["a", "c"]), groups(&[])]);
+    a2.drain();
+    h.send(&a2, create("shared"));
+    assert_eq!(a2.drain(), [groups(&[("shared", "a", &["a"])])]);
+}
+
+#[test]
+fn leaving_updates_everyone_closes_membership_and_deletes_last_member_group() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    a.drain();
+    b.drain();
+    c.drain();
+    h.send(&c, leave("g1"));
+    assert_eq!(c.drain(), [error(ErrorKind::NotMember)]);
+    h.send(&a, leave("g1"));
+    let expected = groups(&[("g1", "a", &["b"])]);
+    for client in [&mut a, &mut b, &mut c] {
+        assert_eq!(client.drain(), [expected.clone()]);
+    }
+    h.send(&a, say("g1", "hi"));
+    assert_eq!(a.drain(), [error(ErrorKind::NotMember)]);
+    h.send(&b, leave("g1"));
+    for client in [&mut a, &mut b, &mut c] {
+        assert_eq!(client.drain(), [groups(&[])]);
+    }
+    h.send(&c, create("g1"));
+    assert_eq!(c.drain(), [groups(&[("g1", "c", &["c"])])]);
+}

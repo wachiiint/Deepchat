@@ -18,11 +18,11 @@ export async function listGroups(): Promise<Group[]> {
   return invoke("list_groups");
 }
 
-export async function createGroup(name: string): Promise<Group> {
+export async function createGroup(name: string): Promise<void> {
   return invoke("create_group", { name });
 }
 
-export async function joinGroup(groupId: string): Promise<Group> {
+export async function joinGroup(groupId: string): Promise<void> {
   return invoke("join_group", { groupId });
 }
 
@@ -33,7 +33,7 @@ export async function openPrivate(peer: string): Promise<string> {
 export async function sendMessage(
   roomId: string,
   text: string,
-): Promise<Message> {
+): Promise<void> {
   return invoke("send_message", { roomId, text });
 }
 
@@ -41,8 +41,20 @@ export async function getMessages(roomId: string): Promise<Message[]> {
   return invoke("get_messages", { roomId });
 }
 
-export async function simulateIncoming(roomId: string): Promise<Message> {
-  return invoke("simulate_incoming", { roomId });
+export async function leaveGroup(groupId: string): Promise<void> {
+  return invoke("leave_group", { groupId });
+}
+
+export async function disconnect(): Promise<void> {
+  return invoke("disconnect");
+}
+
+export function onChatError(handler: (message: string) => void): Promise<UnlistenFn> {
+  return listen<string>("chat-error", (event) => handler(event.payload));
+}
+
+export function onDisconnected(handler: (message: string) => void): Promise<UnlistenFn> {
+  return listen<string>("disconnected", (event) => handler(event.payload));
 }
 
 export function onUsersUpdated(

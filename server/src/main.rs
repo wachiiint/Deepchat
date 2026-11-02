@@ -38,3 +38,6 @@ async fn main() -> std::io::Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod group_tcp_tests;

@@ -16,7 +16,7 @@
   } = $props();
 
   let host = $state("127.0.0.1");
-  let port = $state("8080");
+  let port = $state("7878");
   let name = $state("");
 
   async function handleSubmit(event: Event) {
@@ -33,7 +33,7 @@
   <div class="card">
     <p class="brand">Deepchat</p>
     <h1>Join the chat</h1>
-    <p class="hint">Stub mode — Tauri commands seed demo users and groups.</p>
+    <p class="hint">Connect to your Deepchat server to chat with other users.</p>
 
     <form onsubmit={handleSubmit}>
       <label>

@@ -7,7 +7,7 @@ mod tests;
 
 use tokio::sync::mpsc;
 
-use crate::state::{ConnId, Outbox, State};
+use crate::state::{ConnId, Group, Outbox, State};
 use protocol::{ClientMsg, ErrorKind, ServerMsg};
 
 pub enum Event {
@@ -29,8 +29,11 @@ fn apply(state: &mut State, ev: Event) {
         Event::Connect { id, tx } => state.connect(id, tx),
         Event::Msg { id, msg } => handle(state, id, msg),
         Event::Disconnect { id } => {
-            if state.disconnect(id).is_some() {
+            if let Some(name) = state.disconnect(id) {
                 broadcast_users(state);
+                if state.remove_member(&name) {
+                    broadcast_groups(state);
+                }
             }
         }
     }
@@ -54,7 +57,95 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
     match msg {
         ClientMsg::Register { .. } | ClientMsg::Pong => {}
         ClientMsg::Dm { to, text } => dm(state, id, me, to, text),
-        other => println!("{me}: not implemented yet: {other:?}"),
+        ClientMsg::ListGroups => state.send(
+            id,
+            ServerMsg::Groups {
+                groups: state.group_list(),
+            },
+        ),
+        ClientMsg::CreateGroup { group } => {
+            if state.groups.contains_key(&group) {
+                state.send(
+                    id,
+                    ServerMsg::Error {
+                        kind: ErrorKind::GroupExists,
+                    },
+                );
+            } else {
+                state.groups.insert(
+                    group,
+                    Group {
+                        creator: me.clone(),
+                        members: [me].into_iter().collect(),
+                    },
+                );
+                broadcast_groups(state);
+            }
+        }
+        ClientMsg::JoinGroup { group } => match state.groups.get_mut(&group) {
+            None => state.send(
+                id,
+                ServerMsg::Error {
+                    kind: ErrorKind::UnknownGroup,
+                },
+            ),
+            Some(group) => {
+                if group.members.insert(me) {
+                    broadcast_groups(state);
+                }
+            }
+        },
+        ClientMsg::LeaveGroup { group } => match state.groups.get_mut(&group) {
+            None => state.send(
+                id,
+                ServerMsg::Error {
+                    kind: ErrorKind::UnknownGroup,
+                },
+            ),
+            Some(info) if !info.members.contains(&me) => {
+                state.send(
+                    id,
+                    ServerMsg::Error {
+                        kind: ErrorKind::NotMember,
+                    },
+                );
+            }
+            Some(info) => {
+                info.members.remove(&me);
+                if info.members.is_empty() {
+                    state.groups.remove(&group);
+                }
+                broadcast_groups(state);
+            }
+        },
+        ClientMsg::GroupMsg { group, text } => match state.groups.get(&group) {
+            None => state.send(
+                id,
+                ServerMsg::Error {
+                    kind: ErrorKind::UnknownGroup,
+                },
+            ),
+            Some(info) if !info.members.contains(&me) => {
+                state.send(
+                    id,
+                    ServerMsg::Error {
+                        kind: ErrorKind::NotMember,
+                    },
+                );
+            }
+            Some(info) => {
+                let msg = ServerMsg::GroupMsg {
+                    group: group.clone(),
+                    from: me,
+                    text,
+                };
+                for member in &info.members {
+                    if let Some(member_id) = state.id_of(member) {
+                        state.send(member_id, msg.clone());
+                    }
+                }
+            }
+        },
     }
 }
 
@@ -89,5 +180,11 @@ fn dm(state: &State, from_id: ConnId, from: String, to: String, text: String) {
 fn broadcast_users(state: &State) {
     state.broadcast(&ServerMsg::Users {
         names: state.names(),
+    });
+}
+
+fn broadcast_groups(state: &State) {
+    state.broadcast(&ServerMsg::Groups {
+        groups: state.group_list(),
     });
 }

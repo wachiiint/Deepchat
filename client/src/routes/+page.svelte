@@ -19,18 +19,56 @@
   let busy = $state(false);
   let error = $state("");
 
+  let pendingGroup = $state<string | null>(null);
+  let usersRevision = 0;
+  let groupsRevision = 0;
+  let disconnectRevision = 0;
+  let listenersReady: Promise<void>;
   let unlisteners: UnlistenFn[] = [];
+
+  function closeRoom() {
+    activeRoom = null;
+    selectedGroupId = null;
+    selectedPeer = null;
+    messages = [];
+  }
+
+  function updateGroups(next: Group[]) {
+    groupsRevision++;
+    groups = next;
+    if (activeRoom?.kind === "group" && !next.some((g) => g.id === activeRoom?.id && g.members.includes(currentUser))) {
+      closeRoom();
+    }
+    const joined = next.find((g) => g.name === pendingGroup && g.members.includes(currentUser));
+    if (joined) {
+      pendingGroup = null;
+      void selectGroup(joined);
+    }
+  }
 
   onMount(() => {
     let cancelled = false;
 
-    (async () => {
+    listenersReady = (async () => {
       const offs = await Promise.all([
         chatApi.onUsersUpdated((next) => {
-          users = next;
+          usersRevision++; users = next;
         }),
         chatApi.onGroupsUpdated((next) => {
-          groups = next;
+          updateGroups(next);
+        }),
+        chatApi.onChatError((message) => {
+          error = message;
+          pendingGroup = null;
+        }),
+        chatApi.onDisconnected((message) => {
+          disconnectRevision++;
+          connected = false;
+          pendingGroup = null;
+          closeRoom();
+          users = [];
+          groups = [];
+          error = message;
         }),
         chatApi.onMessageReceived((message) => {
           if (activeRoom && message.roomId === activeRoom.id) {
@@ -61,14 +99,20 @@
     busy = true;
     error = "";
     try {
+      await listenersReady;
+      currentUser = payload.name;
+      const initialDisconnectRevision = disconnectRevision;
+      const initialUsersRevision = usersRevision;
+      const initialGroupsRevision = groupsRevision;
       const result = await chatApi.connect(
         payload.host,
         payload.port,
         payload.name,
       );
+      if (disconnectRevision !== initialDisconnectRevision) return;
       currentUser = result.name;
-      users = result.users;
-      groups = result.groups;
+      if (usersRevision === initialUsersRevision) users = result.users;
+      if (groupsRevision === initialGroupsRevision) groups = result.groups;
       connected = true;
     } catch (e) {
       error = String(e);
@@ -78,7 +122,12 @@
   }
 
   async function loadMessages(roomId: string) {
-    messages = await chatApi.getMessages(roomId);
+    const history = await chatApi.getMessages(roomId);
+    if (activeRoom?.id === roomId) {
+      const byId = new Map(history.map((message) => [message.id, message]));
+      for (const message of messages) if (message.roomId === roomId) byId.set(message.id, message);
+      messages = [...byId.values()];
+    }
   }
 
   async function selectUser(peer: string) {
@@ -90,7 +139,7 @@
       selectedPeer = peer;
       selectedGroupId = null;
       activeRoom = { id: roomId, kind: "private", title: peer };
-      await loadMessages(roomId);
+      messages = []; await loadMessages(roomId);
     } catch (e) {
       error = String(e);
     } finally {
@@ -109,7 +158,7 @@
       selectedGroupId = group.id;
       selectedPeer = null;
       activeRoom = { id: group.id, kind: "group", title: group.name };
-      await loadMessages(group.id);
+      messages = []; await loadMessages(group.id);
     } catch (e) {
       error = String(e);
     } finally {
@@ -121,10 +170,10 @@
     busy = true;
     error = "";
     try {
-      const group = await chatApi.createGroup(name);
-      groups = await chatApi.listGroups();
-      await selectGroup(group);
+      pendingGroup = name;
+      await chatApi.createGroup(name);
     } catch (e) {
+      pendingGroup = null;
       error = String(e);
     } finally {
       busy = false;
@@ -135,10 +184,10 @@
     busy = true;
     error = "";
     try {
-      const group = await chatApi.joinGroup(groupId);
-      groups = await chatApi.listGroups();
-      await selectGroup(group);
+      pendingGroup = groups.find((group) => group.id === groupId)?.name ?? null;
+      await chatApi.joinGroup(groupId);
     } catch (e) {
+      pendingGroup = null;
       error = String(e);
     } finally {
       busy = false;
@@ -146,35 +195,32 @@
   }
 
   async function handleSend(text: string) {
-    if (!activeRoom) return;
+    if (!activeRoom) return false;
     busy = true;
     error = "";
     try {
-      const message = await chatApi.sendMessage(activeRoom.id, text);
-      if (!messages.some((m) => m.id === message.id)) {
-        messages = [...messages, message];
-      }
+      await chatApi.sendMessage(activeRoom.id, text);
+      return true;
     } catch (e) {
       error = String(e);
+      return false;
     } finally {
       busy = false;
     }
   }
 
-  async function handleSimulate() {
-    if (!activeRoom) return;
-    busy = true;
+  async function handleLeaveGroup(groupId: string) {
     error = "";
+    try { await chatApi.leaveGroup(groupId); } catch (e) { error = String(e); }
+  }
+
+  async function handleDisconnect() {
     try {
-      const message = await chatApi.simulateIncoming(activeRoom.id);
-      if (!messages.some((m) => m.id === message.id)) {
-        messages = [...messages, message];
-      }
-    } catch (e) {
-      error = String(e);
-    } finally {
-      busy = false;
-    }
+      await chatApi.disconnect();
+      connected = false;
+      closeRoom();
+      groups = []; users = []; pendingGroup = null;
+    } catch (e) { error = String(e); }
   }
 </script>
 
@@ -186,6 +232,7 @@
       <div class="sidebar-top">
         <p class="brand">Deepchat</p>
         <p class="you">Signed in as <strong>{currentUser}</strong></p>
+        <button type="button" onclick={handleDisconnect}>Disconnect</button>
       </div>
       <div class="lists">
         <UserList
@@ -201,6 +248,8 @@
           onselect={selectGroup}
           onjoin={handleJoinGroup}
           oncreate={handleCreateGroup}
+          onleave={handleLeaveGroup}
+          busy={busy || pendingGroup !== null}
         />
       </div>
       {#if error}
@@ -214,7 +263,6 @@
         {currentUser}
         {busy}
         onsend={handleSend}
-        onsimulate={handleSimulate}
       />
     </main>
   </div>

@@ -8,8 +8,12 @@
     onselect,
     onjoin,
     oncreate,
+    onleave,
+    busy = false,
   }: {
     groups?: Group[];
+    busy?: boolean;
+    onleave: (groupId: string) => void | Promise<void>;
     currentUser?: string;
     selectedGroupId?: string | null;
     onselect: (group: Group) => void | Promise<void>;
@@ -35,8 +39,8 @@
   </header>
 
   <form class="create" onsubmit={handleCreate}>
-    <input bind:value={newGroupName} placeholder="New group name" />
-    <button type="submit" disabled={!newGroupName.trim()}>Create</button>
+    <input bind:value={newGroupName} aria-label="New group name" placeholder="New group name" disabled={busy} />
+    <button type="submit" disabled={busy || !newGroupName.trim()}>Create</button>
   </form>
 
   <ul>
@@ -47,6 +51,7 @@
           type="button"
           class="group"
           class:selected={selectedGroupId === group.id}
+          disabled={busy || !isMember}
           onclick={() => onselect(group)}
         >
           <span class="title-row">
@@ -55,12 +60,15 @@
               <span class="badge">joined</span>
             {/if}
           </span>
+          <span class="members">Created by {group.creator}</span>
           <span class="members">{group.members.join(", ")}</span>
         </button>
         {#if !isMember}
-          <button type="button" class="join" onclick={() => onjoin(group.id)}>
+          <button type="button" class="join" disabled={busy} onclick={() => onjoin(group.id)}>
             Join
           </button>
+        {:else}
+          <button type="button" class="join" disabled={busy} onclick={() => onleave(group.id)}>Leave</button>
         {/if}
       </li>
     {:else}
@@ -151,12 +159,16 @@
     font: inherit;
     color: #1f1e1b;
     cursor: pointer;
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
   }
 
-  .group:hover {
+  .group:disabled { cursor: default; }
+
+  .group:hover:not(:disabled) {
     background: #ebe6dc;
   }
 
