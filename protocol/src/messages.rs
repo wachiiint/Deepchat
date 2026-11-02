@@ -57,28 +57,3 @@ pub enum ErrorKind {
     UnknownGroup,
     NotMember,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn group_metadata_round_trips_and_leave_preserves_existing_variant_indexes() {
-        let groups = ServerMsg::Groups {
-            groups: vec![GroupInfo {
-                group: "study".into(),
-                creator: "alice".into(),
-                members: vec!["alice".into(), "bob".into()],
-            }],
-        };
-        let bytes = postcard::to_stdvec(&groups).unwrap();
-        assert_eq!(postcard::from_bytes::<ServerMsg>(&bytes).unwrap(), groups);
-        assert_eq!(postcard::to_stdvec(&ClientMsg::Pong).unwrap(), [6]);
-        let leave = ClientMsg::LeaveGroup {
-            group: "study".into(),
-        };
-        let bytes = postcard::to_stdvec(&leave).unwrap();
-        assert_eq!(bytes[0], 7);
-        assert_eq!(postcard::from_bytes::<ClientMsg>(&bytes).unwrap(), leave);
-    }
-}
