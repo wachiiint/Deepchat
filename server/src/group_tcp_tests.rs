@@ -17,17 +17,16 @@ async fn receive(socket: &mut TcpStream) -> ServerMsg {
         .unwrap()
         .unwrap()
 }
+
 async fn send(socket: &mut TcpStream, msg: ClientMsg) {
     write_frame(socket, &msg).await.unwrap();
 }
+
 async fn list(socket: &mut TcpStream) -> Vec<GroupInfo> {
     send(socket, ClientMsg::ListGroups).await;
-    loop {
-        if let ServerMsg::Groups { groups } = receive(socket).await {
-            return groups;
-        }
-    }
+    next_groups(socket).await
 }
+
 async fn next_groups(socket: &mut TcpStream) -> Vec<GroupInfo> {
     loop {
         if let ServerMsg::Groups { groups } = receive(socket).await {
@@ -35,6 +34,7 @@ async fn next_groups(socket: &mut TcpStream) -> Vec<GroupInfo> {
         }
     }
 }
+
 async fn register(addr: std::net::SocketAddr, name: &str) -> TcpStream {
     let mut socket = TcpStream::connect(addr).await.unwrap();
     socket.set_nodelay(true).unwrap();
@@ -69,13 +69,17 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
             id += 1;
         }
     });
+
+    // A, B and C register
     let mut a = register(addr, "A").await;
     let mut b = register(addr, "B").await;
     let mut c = register(addr, "C").await;
+
     // ListGroups acts as a barrier for preceding presence updates on each connection.
     assert!(list(&mut a).await.is_empty());
     assert!(list(&mut b).await.is_empty());
     assert!(list(&mut c).await.is_empty());
+
     send(&mut a, ClientMsg::CreateGroup { group: "g1".into() }).await;
     let created = vec![GroupInfo {
         group: "g1".into(),
@@ -85,6 +89,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     for socket in [&mut a, &mut b, &mut c] {
         assert_eq!(next_groups(socket).await, created);
     }
+
     send(&mut b, ClientMsg::JoinGroup { group: "g1".into() }).await;
     let joined = vec![GroupInfo {
         members: vec!["A".into(), "B".into()],
@@ -93,6 +98,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     for socket in [&mut a, &mut b, &mut c] {
         assert_eq!(next_groups(socket).await, joined);
     }
+
     send(
         &mut a,
         ClientMsg::GroupMsg {
@@ -108,6 +114,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     };
     assert_eq!(receive(&mut a).await, message);
     assert_eq!(receive(&mut b).await, message);
+
     // Every broadcast would precede C's response. No timing-based silence assertion needed.
     send(&mut c, ClientMsg::ListGroups).await;
     assert_eq!(receive(&mut c).await, ServerMsg::Groups { groups: joined });
@@ -125,6 +132,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
             kind: ErrorKind::NotMember
         }
     );
+
     send(&mut a, ClientMsg::LeaveGroup { group: "g1".into() }).await;
     let remaining = vec![GroupInfo {
         members: vec!["B".into()],
@@ -133,9 +141,12 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     for socket in [&mut a, &mut b, &mut c] {
         assert_eq!(next_groups(socket).await, remaining);
     }
+
+    // B's disconnect deletes the now-empty group
     drop(b);
     assert!(next_groups(&mut a).await.is_empty());
     assert!(next_groups(&mut c).await.is_empty());
+
     send(&mut c, ClientMsg::CreateGroup { group: "g1".into() }).await;
     assert_eq!(
         next_groups(&mut c).await,
@@ -145,6 +156,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
             members: vec!["C".into()]
         }]
     );
+
     drop(a);
     drop(c);
     accept_task.abort();
