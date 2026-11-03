@@ -241,9 +241,11 @@
           {/if}
           {#if row.kind === "event"}
             <p class="event">
-              <strong>{row.event.user}</strong>
-              {row.event.kind === "joined" ? "joined" : "left"} the group
-              <time>{formatTime(row.event.timestamp)}</time>
+              <span>
+                <strong>{row.event.user}</strong>
+                {row.event.kind === "joined" ? "joined" : "left"} the group
+                <time>{formatTime(row.event.timestamp)}</time>
+              </span>
             </p>
           {:else}
             {@const { message, continued } = row}
@@ -468,7 +470,9 @@
     padding: 16px 0 8px;
   }
 
-  .day {
+  /* Join/leave notices match the day divider's text weight, without its rules. */
+  .day,
+  .event {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -476,6 +480,10 @@
     color: var(--faint);
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .event {
+    justify-content: center;
   }
 
   .day::before,
@@ -486,16 +494,10 @@
     background: var(--line);
   }
 
-  .event {
-    /* Aligns with message text: 24px page gutter + 32px avatar + 12px gap. */
-    padding: 4px 24px 4px 68px;
-    color: var(--faint);
-    font-size: 12px;
+  .event time {
+    font-weight: 400;
   }
 
-  .event strong {
-    font-weight: 600;
-  }
   .msg {
     display: flex;
     gap: 12px;
