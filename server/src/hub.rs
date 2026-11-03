@@ -7,7 +7,7 @@ mod tests;
 
 use tokio::sync::mpsc;
 
-use crate::state::{ConnId, Group, Outbox, State};
+use crate::state::{ConnId, Outbox, State};
 use protocol::{ClientMsg, ErrorKind, ServerMsg};
 
 pub enum Event {
@@ -44,12 +44,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
         // before a name is set, only Register is allowed
         match msg {
             ClientMsg::Register { name } => register(state, id, name),
-            _ => state.send(
-                id,
-                ServerMsg::Error {
-                    kind: ErrorKind::NotRegistered,
-                },
-            ),
+            _ => reject(state, id, ErrorKind::NotRegistered),
         }
         return;
     };
@@ -63,89 +58,10 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
                 groups: state.group_list(),
             },
         ),
-        ClientMsg::CreateGroup { group } => {
-            if state.groups.contains_key(&group) {
-                state.send(
-                    id,
-                    ServerMsg::Error {
-                        kind: ErrorKind::GroupExists,
-                    },
-                );
-            } else {
-                state.groups.insert(
-                    group,
-                    Group {
-                        creator: me.clone(),
-                        members: [me].into_iter().collect(),
-                    },
-                );
-                broadcast_groups(state);
-            }
-        }
-        ClientMsg::JoinGroup { group } => match state.groups.get_mut(&group) {
-            None => state.send(
-                id,
-                ServerMsg::Error {
-                    kind: ErrorKind::UnknownGroup,
-                },
-            ),
-            Some(group) => {
-                if group.members.insert(me) {
-                    broadcast_groups(state);
-                }
-            }
-        },
-        ClientMsg::LeaveGroup { group } => match state.groups.get_mut(&group) {
-            None => state.send(
-                id,
-                ServerMsg::Error {
-                    kind: ErrorKind::UnknownGroup,
-                },
-            ),
-            Some(info) if !info.members.contains(&me) => {
-                state.send(
-                    id,
-                    ServerMsg::Error {
-                        kind: ErrorKind::NotMember,
-                    },
-                );
-            }
-            Some(info) => {
-                info.members.remove(&me);
-                if info.members.is_empty() {
-                    state.groups.remove(&group);
-                }
-                broadcast_groups(state);
-            }
-        },
-        ClientMsg::GroupMsg { group, text } => match state.groups.get(&group) {
-            None => state.send(
-                id,
-                ServerMsg::Error {
-                    kind: ErrorKind::UnknownGroup,
-                },
-            ),
-            Some(info) if !info.members.contains(&me) => {
-                state.send(
-                    id,
-                    ServerMsg::Error {
-                        kind: ErrorKind::NotMember,
-                    },
-                );
-            }
-            Some(info) => {
-                let msg = ServerMsg::GroupMsg {
-                    group: group.clone(),
-                    from: me,
-                    text,
-                };
-                for member in &info.members {
-                    if let Some(member_id) = state.id_of(member) {
-                        state.send(member_id, msg.clone());
-                    }
-                }
-            }
-        },
+        ClientMsg::CreateGroup { group } => create_group(state, id, me, group),
+        ClientMsg::JoinGroup { group } => join_group(state, id, me, group),
+        ClientMsg::LeaveGroup { group } => leave_group(state, id, &me, &group),
+        ClientMsg::GroupMsg { group, text } => group_msg(state, id, me, group, text),
     }
 }
 
@@ -155,26 +71,62 @@ fn register(state: &mut State, id: ConnId, name: String) {
             state.send(id, ServerMsg::Welcome { name });
             broadcast_users(state);
         }
-        Err(kind) => state.send(id, ServerMsg::Error { kind }),
+        Err(kind) => reject(state, id, kind),
     }
 }
 
 // only sender and receiver get it; the sender's copy confirms delivery
 fn dm(state: &State, from_id: ConnId, from: String, to: String, text: String) {
     let Some(to_id) = state.id_of(&to) else {
-        state.send(
-            from_id,
-            ServerMsg::Error {
-                kind: ErrorKind::UnknownUser,
-            },
-        );
-        return;
+        return reject(state, from_id, ErrorKind::UnknownUser);
     };
     let msg = ServerMsg::Dm { from, to, text };
     if to_id != from_id {
         state.send(to_id, msg.clone());
     }
     state.send(from_id, msg);
+}
+
+fn create_group(state: &mut State, id: ConnId, me: String, group: String) {
+    match state.create_group(group, &me) {
+        Ok(()) => broadcast_groups(state),
+        Err(kind) => reject(state, id, kind),
+    }
+}
+
+fn join_group(state: &mut State, id: ConnId, me: String, group: String) {
+    match state.join_group(&group, me) {
+        Ok(true) => broadcast_groups(state),
+        Ok(false) => {} // already a member
+        Err(kind) => reject(state, id, kind),
+    }
+}
+
+fn leave_group(state: &mut State, id: ConnId, me: &str, group: &str) {
+    match state.leave_group(group, me) {
+        Ok(()) => broadcast_groups(state),
+        Err(kind) => reject(state, id, kind),
+    }
+}
+
+// members only; the sender's copy confirms delivery
+fn group_msg(state: &State, id: ConnId, me: String, group: String, text: String) {
+    let members = match state.members_for(&group, &me) {
+        Ok(members) => members,
+        Err(kind) => return reject(state, id, kind),
+    };
+    let msg = ServerMsg::GroupMsg {
+        group,
+        from: me,
+        text,
+    };
+    for member_id in members.iter().filter_map(|m| state.id_of(m)) {
+        state.send(member_id, msg.clone());
+    }
+}
+
+fn reject(state: &State, id: ConnId, kind: ErrorKind) {
+    state.send(id, ServerMsg::Error { kind });
 }
 
 fn broadcast_users(state: &State) {

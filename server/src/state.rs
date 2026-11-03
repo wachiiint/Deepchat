@@ -1,5 +1,6 @@
 //! In-memory server state. Owned by the hub task only, so no locks.
 
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
 
 use tokio::sync::mpsc;
@@ -14,16 +15,16 @@ struct Conn {
     name: Option<String>, // None until Register succeeds
 }
 
-pub struct Group {
-    pub creator: String,
-    pub members: BTreeSet<String>,
+struct Group {
+    creator: String,
+    members: BTreeSet<String>,
 }
 
 #[derive(Default)]
 pub struct State {
     conns: HashMap<ConnId, Conn>,
     names: HashMap<String, ConnId>,
-    pub groups: HashMap<String, Group>,
+    groups: HashMap<String, Group>,
 }
 
 impl State {
@@ -63,6 +64,47 @@ impl State {
         let mut v: Vec<String> = self.names.keys().cloned().collect();
         v.sort();
         v
+    }
+
+    pub fn create_group(&mut self, group: String, creator: &str) -> Result<(), ErrorKind> {
+        match self.groups.entry(group) {
+            Entry::Occupied(_) => Err(ErrorKind::GroupExists),
+            Entry::Vacant(e) => {
+                e.insert(Group {
+                    creator: creator.to_owned(),
+                    members: BTreeSet::from([creator.to_owned()]),
+                });
+                Ok(())
+            }
+        }
+    }
+
+    /// `Ok(true)` if `name` just joined, `Ok(false)` if it already was a member.
+    pub fn join_group(&mut self, group: &str, name: String) -> Result<bool, ErrorKind> {
+        let group = self.groups.get_mut(group).ok_or(ErrorKind::UnknownGroup)?;
+        Ok(group.members.insert(name))
+    }
+
+    /// Deletes the group when its last member leaves.
+    pub fn leave_group(&mut self, group: &str, name: &str) -> Result<(), ErrorKind> {
+        let info = self.groups.get_mut(group).ok_or(ErrorKind::UnknownGroup)?;
+        if !info.members.remove(name) {
+            return Err(ErrorKind::NotMember);
+        }
+        if info.members.is_empty() {
+            self.groups.remove(group);
+        }
+        Ok(())
+    }
+
+    /// Members of `group`, but only if `name` is one of them.
+    pub fn members_for(&self, group: &str, name: &str) -> Result<&BTreeSet<String>, ErrorKind> {
+        let group = self.groups.get(group).ok_or(ErrorKind::UnknownGroup)?;
+        if group.members.contains(name) {
+            Ok(&group.members)
+        } else {
+            Err(ErrorKind::NotMember)
+        }
     }
 
     pub fn group_list(&self) -> Vec<GroupInfo> {
