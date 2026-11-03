@@ -556,6 +556,89 @@ mod tests {
         server.await.unwrap();
     }
 
+    #[tokio::test]
+    async fn private_room_sends_dm_and_shows_only_the_server_echo() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (checked_tx, checked_rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            read_frame::<_, ClientMsg>(&mut socket).await.unwrap();
+            write_frame(&mut socket, &ServerMsg::Welcome { name: "me".into() })
+                .await
+                .unwrap();
+            write_frame(
+                &mut socket,
+                &ServerMsg::Users {
+                    names: vec!["me".into(), "peer".into()],
+                },
+            )
+            .await
+            .unwrap();
+            read_frame::<_, ClientMsg>(&mut socket).await.unwrap(); // ListGroups
+            write_frame(&mut socket, &ServerMsg::Groups { groups: vec![] })
+                .await
+                .unwrap();
+            assert_eq!(
+                read_frame::<_, ClientMsg>(&mut socket).await.unwrap(),
+                Some(ClientMsg::Dm {
+                    to: "peer".into(),
+                    text: "yo".into()
+                })
+            );
+            // Wait until the client has checked that nothing was added locally.
+            checked_rx.await.unwrap();
+            for (from, to, text) in [("me", "peer", "yo"), ("peer", "me", "hey")] {
+                write_frame(
+                    &mut socket,
+                    &ServerMsg::Dm {
+                        from: from.into(),
+                        to: to.into(),
+                        text: text.into(),
+                    },
+                )
+                .await
+                .unwrap();
+            }
+        });
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (connection, _) = Connection::connect(
+            "127.0.0.1",
+            port,
+            "me".into(),
+            Arc::new(move |update| {
+                tx.send(update).unwrap();
+            }),
+        )
+        .await
+        .unwrap();
+        // Your own name is listed but cannot be opened; neither can an unknown user.
+        assert!(connection.open_private("me").is_err());
+        assert!(connection.open_private("ghost").is_err());
+        let private = connection.open_private("peer").unwrap();
+        assert!(connection.messages(&private).unwrap().is_empty());
+        connection
+            .send(connection.outgoing(&private, "yo".into()).unwrap())
+            .await
+            .unwrap();
+        // The server echoes the sender's DM, so adding it locally would show it twice.
+        assert!(connection.messages(&private).unwrap().is_empty());
+        checked_tx.send(()).unwrap();
+        for expected in [("me", "yo"), ("peer", "hey")] {
+            assert!(
+                matches!(event(&mut rx).await, Update::Message(m) if m.room_id == private && (m.sender.as_str(), m.text.as_str()) == expected)
+            );
+        }
+        let texts: Vec<_> = connection
+            .messages(&private)
+            .unwrap()
+            .into_iter()
+            .map(|m| m.text)
+            .collect();
+        assert_eq!(texts, ["yo", "hey"]);
+        server.await.unwrap();
+    }
+
     #[test]
     fn room_ids_are_stable_and_cannot_collide_with_delimiters_or_groups() {
         assert_eq!(private_id("a", "b"), private_id("b", "a"));
