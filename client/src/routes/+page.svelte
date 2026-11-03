@@ -20,6 +20,19 @@
   let error = $state("");
 
   let pendingGroup = $state<string | null>(null);
+  let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+  const PENDING_MS = 5000;
+
+  // Which group to auto-open once the server's Groups push lists us in it.
+  // Expires, so a no-op join (no reply, no push) can't auto-open a group later.
+  function setPending(name: string | null) {
+    clearTimeout(pendingTimer);
+    pendingGroup = name;
+    if (name !== null) {
+      pendingTimer = setTimeout(() => (pendingGroup = null), PENDING_MS);
+    }
+  }
+
   let usersRevision = 0;
   let groupsRevision = 0;
   let disconnectRevision = 0;
@@ -48,7 +61,7 @@
       (g) => g.name === pendingGroup && g.members.includes(currentUser),
     );
     if (joined) {
-      pendingGroup = null;
+      setPending(null);
       void selectGroup(joined);
     }
   }
@@ -68,12 +81,11 @@
         }),
         chatApi.onChatError((message) => {
           error = message;
-          pendingGroup = null;
         }),
         chatApi.onDisconnected((message) => {
           disconnectRevision++;
           connected = false;
-          pendingGroup = null;
+          setPending(null);
           closeRoom();
           users = [];
           groups = [];
@@ -142,6 +154,7 @@
 
   async function selectUser(peer: string) {
     if (peer === currentUser) return;
+    setPending(null);
     busy = true;
     error = "";
     try {
@@ -182,10 +195,10 @@
     busy = true;
     error = "";
     try {
-      pendingGroup = name;
+      setPending(name);
       await chatApi.createGroup(name);
     } catch (e) {
-      pendingGroup = null;
+      setPending(null);
       error = String(e);
     } finally {
       busy = false;
@@ -196,10 +209,10 @@
     busy = true;
     error = "";
     try {
-      pendingGroup = groups.find((group) => group.id === groupId)?.name ?? null;
+      setPending(groups.find((group) => group.id === groupId)?.name ?? null);
       await chatApi.joinGroup(groupId);
     } catch (e) {
-      pendingGroup = null;
+      setPending(null);
       error = String(e);
     } finally {
       busy = false;
@@ -222,6 +235,7 @@
   }
 
   async function handleLeaveGroup(groupId: string) {
+    setPending(null);
     error = "";
     try {
       await chatApi.leaveGroup(groupId);
@@ -237,7 +251,7 @@
       closeRoom();
       groups = [];
       users = [];
-      pendingGroup = null;
+      setPending(null);
     } catch (e) {
       error = String(e);
     }
@@ -264,7 +278,7 @@
           onjoin={handleJoinGroup}
           oncreate={handleCreateGroup}
           onleave={handleLeaveGroup}
-          busy={busy || pendingGroup !== null}
+          {busy}
         />
       </div>
       {#if error}
