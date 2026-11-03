@@ -12,6 +12,7 @@ pub enum ClientMsg {
     JoinGroup { group: String },
     GroupMsg { group: String, text: String },
     LeaveGroup { group: String },
+    DeleteGroup { group: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +40,9 @@ pub enum ServerMsg {
     Error {
         kind: ErrorKind,
     },
+    GroupDeleted {
+        group: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,4 +60,5 @@ pub enum ErrorKind {
     GroupExists,
     UnknownGroup,
     NotMember,
+    NotCreator,
 }

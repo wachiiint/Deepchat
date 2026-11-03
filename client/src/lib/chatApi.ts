@@ -42,6 +42,10 @@ export async function leaveGroup(groupId: string): Promise<void> {
   return invoke("leave_group", { groupId });
 }
 
+export async function deleteGroup(groupId: string): Promise<void> {
+  return invoke("delete_group", { groupId });
+}
+
 export async function disconnect(): Promise<void> {
   return invoke("disconnect");
 }
@@ -74,4 +78,10 @@ export function onMessageReceived(
   handler: (message: Message) => void,
 ): Promise<UnlistenFn> {
   return listen<Message>("message-received", (event) => handler(event.payload));
+}
+
+export function onGroupDeleted(
+  handler: (groupId: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>("group-deleted", (event) => handler(event.payload));
 }

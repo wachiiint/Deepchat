@@ -5,14 +5,18 @@
 
   let {
     group,
+    currentUser = "",
     busy = false,
     joining = false,
     onjoin,
+    ondelete,
   }: {
     group: Group;
+    currentUser?: string;
     busy?: boolean;
     joining?: boolean;
     onjoin: (groupId: string) => void | Promise<void>;
+    ondelete: (group: Group) => void;
   } = $props();
 </script>
 
@@ -23,6 +27,11 @@
       <span class="title">{group.name}</span>
     </h1>
     <p class="meta">Created by {group.creator}</p>
+    {#if group.creator === currentUser}
+      <button type="button" class="delete" onclick={() => ondelete(group)}
+        >Delete</button
+      >
+    {/if}
   </header>
 
   <div class="content">
@@ -94,6 +103,24 @@
   .meta {
     color: var(--mute);
     font-size: 13px;
+  }
+
+  .delete {
+    margin-left: auto;
+    flex: none;
+    height: 32px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--mute);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .delete:hover {
+    background: var(--err-soft);
+    color: var(--err);
   }
 
   .content {

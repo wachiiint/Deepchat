@@ -13,6 +13,7 @@
   import ChatRoom from "$lib/components/ChatRoom.svelte";
   import GroupPreview from "$lib/components/GroupPreview.svelte";
   import Toasts from "$lib/components/Toasts.svelte";
+  import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
   import Icon from "$lib/components/Icon.svelte";
 
   let connected = $state(false);
@@ -25,6 +26,8 @@
   let selectedGroupId = $state<string | null>(null);
   let previewGroupId = $state<string | null>(null);
   let busy = $state(false);
+  let deleteTarget = $state<Group | null>(null);
+  let deleting = $state(false);
 
   let lastConnect = $state<ConnectPayload | null>(null);
   let connectError = $state("");
@@ -91,6 +94,7 @@
   function resetSession() {
     connected = false;
     clearPending();
+    deleteTarget = null;
     closeRoom();
     users = [];
     groups = [];
@@ -100,6 +104,19 @@
     createOpen = false;
     createError = "";
     toasts.clearAll();
+  }
+
+  // Drops everything the UI holds for a group that no longer exists.
+  function forgetGroup(id: string) {
+    if (
+      activeRoom?.id === id ||
+      previewGroupId === id ||
+      selectedGroupId === id
+    )
+      closeRoom();
+    delete groupUnread[id];
+    delete roomEvents[id];
+    if (deleteTarget?.id === id) deleteTarget = null;
   }
 
   function report(e: unknown) {
@@ -156,6 +173,13 @@
       previewGroupId = null;
       selectedGroupId = null;
     }
+    if (deleteTarget && !next.some((g) => g.id === deleteTarget?.id))
+      deleteTarget = null;
+    // Unread counts only make sense for groups we are still in.
+    for (const id of Object.keys(groupUnread)) {
+      if (!next.some((g) => g.id === id && g.members.includes(currentUser)))
+        delete groupUnread[id];
+    }
     const joined = next.find(
       (g) => g.name === pendingGroup && g.members.includes(currentUser),
     );
@@ -180,6 +204,17 @@
         }),
         chatApi.onGroupsUpdated((next) => {
           updateGroups(next);
+        }),
+        chatApi.onGroupDeleted((id) => {
+          // Arrives before the new list, so `groups` still has the group.
+          const gone = groups.find((g) => g.id === id);
+          if (
+            gone &&
+            gone.creator !== currentUser &&
+            gone.members.includes(currentUser)
+          )
+            toasts.push(`"${gone.name}" was deleted by ${gone.creator}`);
+          forgetGroup(id);
         }),
         chatApi.onChatError((message) => {
           // A server error while a create is in flight belongs to the create box.
@@ -358,6 +393,19 @@
     }
   }
 
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    deleting = true;
+    try {
+      await chatApi.deleteGroup(deleteTarget.id);
+    } catch (e) {
+      report(e);
+    } finally {
+      deleting = false;
+      deleteTarget = null;
+    }
+  }
+
   async function handleDisconnect() {
     try {
       await chatApi.disconnect();
@@ -435,10 +483,12 @@
       {#if previewGroup}
         <GroupPreview
           group={previewGroup}
+          {currentUser}
           {busy}
           joining={pendingAction === "join" &&
             pendingGroup === previewGroup.name}
           onjoin={handleJoinGroup}
+          ondelete={(group) => (deleteTarget = group)}
         />
       {:else}
         <ChatRoom
@@ -452,12 +502,23 @@
           {sendError}
           onsend={handleSend}
           onleave={handleLeaveGroup}
+          ondelete={(group) => (deleteTarget = group)}
           oneditdraft={() => (sendError = "")}
         />
       {/if}
     </main>
   </div>
   <Toasts />
+  {#if deleteTarget}
+    <ConfirmDialog
+      title={`Delete ${deleteTarget.name}?`}
+      message="This removes the group for all its members and closes the room for everyone. It cannot be undone."
+      confirmLabel="Delete group"
+      busy={deleting}
+      onconfirm={confirmDelete}
+      oncancel={() => (deleteTarget = null)}
+    />
+  {/if}
 {/if}
 
 <style>

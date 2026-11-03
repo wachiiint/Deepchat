@@ -14,6 +14,7 @@
     sendError = "",
     onsend,
     onleave,
+    ondelete,
     oneditdraft,
   }: {
     room?: ActiveRoom | null;
@@ -26,6 +27,7 @@
     sendError?: string;
     onsend: (text: string) => Promise<boolean>;
     onleave: (groupId: string) => void | Promise<void>;
+    ondelete: (group: Group) => void;
     oneditdraft: () => void;
   } = $props();
 
@@ -229,6 +231,13 @@
           <button type="button" class="ghost" onclick={() => onleave(group.id)}
             >Leave</button
           >
+          {#if group.creator === currentUser}
+            <button
+              type="button"
+              class="ghost danger"
+              onclick={() => ondelete(group)}>Delete</button
+            >
+          {/if}
         </div>
       {/if}
     </header>
@@ -410,6 +419,11 @@
   .ghost[aria-expanded="true"] {
     background: var(--raise);
     color: var(--ink);
+  }
+
+  .ghost.danger:hover {
+    background: var(--err-soft);
+    color: var(--err);
   }
 
   .members {

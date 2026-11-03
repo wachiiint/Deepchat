@@ -61,6 +61,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
         ClientMsg::CreateGroup { group } => create_group(state, id, me, group),
         ClientMsg::JoinGroup { group } => join_group(state, id, me, group),
         ClientMsg::LeaveGroup { group } => leave_group(state, id, &me, &group),
+        ClientMsg::DeleteGroup { group } => delete_group(state, id, &me, group),
         ClientMsg::GroupMsg { group, text } => group_msg(state, id, me, group, text),
     }
 }
@@ -105,6 +106,20 @@ fn join_group(state: &mut State, id: ConnId, me: String, group: String) {
 fn leave_group(state: &mut State, id: ConnId, me: &str, group: &str) {
     match state.leave_group(group, me) {
         Ok(()) => broadcast_groups(state),
+        Err(kind) => reject(state, id, kind),
+    }
+}
+
+fn delete_group(state: &mut State, id: ConnId, me: &str, group: String) {
+    match state.delete_group(&group, me) {
+        Ok(notified) => {
+            // Send GroupDeleted before the new list, so the client can still look up the group's name.
+            let msg = ServerMsg::GroupDeleted { group };
+            for member_id in notified.iter().filter_map(|m| state.id_of(m)) {
+                state.send(member_id, msg.clone());
+            }
+            broadcast_groups(state);
+        }
         Err(kind) => reject(state, id, kind),
     }
 }
