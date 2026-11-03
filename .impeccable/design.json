@@ -1,0 +1,486 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-03T08:07:13.486297+00:00",
+  "title": "Design System: Deepchat",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Abyss Navy",
+        "canonical": "#0e1a33",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "side": {
+        "role": "neutral",
+        "displayName": "Trench Navy",
+        "canonical": "#0a1428",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "raise": {
+        "role": "neutral",
+        "displayName": "Shoal Navy",
+        "canonical": "#15264a",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "raise-hover": {
+        "role": "neutral",
+        "displayName": "Shoal Navy Lit",
+        "canonical": "#1b2e57",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#1f3359",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline",
+        "canonical": "#2b4372",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Foam Ink",
+        "canonical": "#e8eef8",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Message Text",
+        "canonical": "#d5deec",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "mute": {
+        "role": "neutral",
+        "displayName": "Mist",
+        "canonical": "#a3b3cd",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Deep Mist",
+        "canonical": "#7f92b1",
+        "tonalRamp": [
+          "#0a1428",
+          "#0e1a33",
+          "#15264a",
+          "#1b2e57",
+          "#1f3359",
+          "#2b4372",
+          "#7f92b1",
+          "#a3b3cd",
+          "#d5deec",
+          "#e8eef8"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Lagoon Aqua",
+        "canonical": "#4fd8eb",
+        "tonalRamp": [
+          "#184147",
+          "#286c76",
+          "#3797a4",
+          "#47c2d4",
+          "#69deee",
+          "#95e8f3",
+          "#b9eff7",
+          "#dcf7fb"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Lagoon Aqua Hover",
+        "canonical": "#80e5f2",
+        "tonalRamp": [
+          "#264549",
+          "#407279",
+          "#5aa0a9",
+          "#73ceda",
+          "#93e9f4",
+          "#b3eff7",
+          "#ccf5fa",
+          "#e6fafc"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Aqua Ink",
+        "canonical": "#071224",
+        "tonalRamp": [
+          "#02050b",
+          "#040912",
+          "#050d19",
+          "#061020",
+          "#2c3645",
+          "#6a717c",
+          "#9ca0a7",
+          "#cdd0d3"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Aqua Wash",
+        "canonical": "rgb(79 216 235 / 0.14)"
+      },
+      "ok": {
+        "role": "semantic",
+        "displayName": "Online Green",
+        "canonical": "#3ddc97",
+        "tonalRamp": [
+          "#12422d",
+          "#1e6e4c",
+          "#2b9a6a",
+          "#37c688",
+          "#5ae1a7",
+          "#8beac1",
+          "#b1f1d5",
+          "#d8f8ea"
+        ]
+      },
+      "err": {
+        "role": "semantic",
+        "displayName": "Signal Red",
+        "canonical": "#ff7b7b",
+        "tonalRamp": [
+          "#4d2525",
+          "#803e3e",
+          "#b25656",
+          "#e66f6f",
+          "#ff8f8f",
+          "#ffb0b0",
+          "#ffcaca",
+          "#ffe5e5"
+        ]
+      },
+      "err-soft": {
+        "role": "semantic",
+        "displayName": "Error Wash",
+        "canonical": "rgb(255 123 123 / 0.12)"
+      },
+      "avatar-1": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 1",
+        "canonical": "#34548c"
+      },
+      "avatar-2": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 2",
+        "canonical": "#2f6690"
+      },
+      "avatar-3": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 3",
+        "canonical": "#56657f"
+      },
+      "avatar-4": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 4",
+        "canonical": "#4b5363"
+      },
+      "avatar-5": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 5",
+        "canonical": "#94681a"
+      },
+      "avatar-6": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 6",
+        "canonical": "#8a5a2b"
+      },
+      "avatar-7": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 7",
+        "canonical": "#6f6a2e"
+      },
+      "avatar-8": {
+        "role": "avatar",
+        "displayName": "Avatar Fill 8",
+        "canonical": "#7a6a52"
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Connect screen heading only."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Wordmark and room/preview header names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default text; message bodies cap at 72ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Form labels; 13px also for meta, ghost buttons, banners, toasts."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Section heads, timestamps, you-tags, inline errors."
+      },
+      "badge": {
+        "displayName": "Badge",
+        "purpose": "Unread pill counts, small-avatar initials."
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 12px 32px rgb(3 8 20 / 0.5)",
+        "purpose": "Members popover and toasts only."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 3px var(--accent-soft)",
+        "purpose": "Focused inputs and composer (state, not elevation)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-change",
+        "value": "120ms ease",
+        "purpose": "Border, ring and background transitions on fields and buttons."
+      },
+      {
+        "name": "toast-in",
+        "value": "fly x 24px, 240ms, cubicOut",
+        "purpose": "Toast entry; exit 144ms (0.6x); zeroed under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Aqua fill, navy ink; connect submit and preview Join.",
+      "html": "<button class=\"ds-btn-primary\">Connect</button>",
+      "css": ".ds-btn-primary{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";height:40px;padding:0 20px;border:0;border-radius:var(--radius-md,8px);background:var(--accent,#4fd8eb);color:var(--accent-ink,#071224);font-size:14px;font-weight:650;cursor:pointer;transition:background-color 120ms ease}.ds-btn-primary:hover{background:var(--accent-hover,#80e5f2)}.ds-btn-primary:focus-visible{outline:2px solid var(--accent,#4fd8eb);outline-offset:2px}.ds-btn-primary:disabled{background:var(--raise,#15264a);color:var(--faint,#7f92b1)}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Room header actions (Members, Leave).",
+      "html": "<button class=\"ds-btn-ghost\">Leave</button>",
+      "css": ".ds-btn-ghost{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";height:32px;padding:0 12px;border:0;border-radius:var(--radius-sm,6px);background:none;color:var(--mute,#a3b3cd);font-size:13px;font-weight:500;cursor:pointer}.ds-btn-ghost:hover{background:var(--raise,#15264a);color:var(--ink,#e8eef8)}.ds-btn-ghost:focus-visible{outline:2px solid var(--accent,#4fd8eb);outline-offset:2px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Connect form field; aqua border + soft ring on focus, red border when invalid.",
+      "html": "<input class=\"ds-input\" placeholder=\"Your name\">",
+      "css": ".ds-input{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";height:40px;padding:0 12px;border:1px solid var(--line-strong,#2b4372);border-radius:var(--radius-md,8px);background:var(--raise,#15264a);color:var(--ink,#e8eef8);font-size:14px;transition:border-color 120ms ease,box-shadow 120ms ease}.ds-input::placeholder{color:var(--faint,#7f92b1)}.ds-input:focus{outline:none;border-color:var(--accent,#4fd8eb);box-shadow:0 0 0 3px var(--accent-soft,rgb(79 216 235 / .14))}.ds-input[aria-invalid=true]{border-color:var(--err,#ff7b7b)}"
+    },
+    {
+      "name": "Composer",
+      "kind": "custom",
+      "refersTo": "composer",
+      "description": "Pinned message bar with aqua send.",
+      "html": "<div class=\"ds-composer\"><input placeholder=\"Type a message...\"><button class=\"ds-send\" aria-label=\"Send\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 13V3M4 7l4-4 4 4\"/></svg></button></div>",
+      "css": ".ds-composer{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border:1px solid var(--line-strong,#2b4372);border-radius:var(--radius-lg,10px);background:var(--raise,#15264a);transition:border-color 120ms ease,box-shadow 120ms ease}.ds-composer:focus-within{border-color:var(--accent,#4fd8eb);box-shadow:0 0 0 3px var(--accent-soft,rgb(79 216 235 / .14))}.ds-composer input{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";flex:1;height:32px;border:0;outline:none;background:none;color:var(--ink,#e8eef8);font-size:14px}.ds-composer input::placeholder{color:var(--faint,#7f92b1)}.ds-send{width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:var(--radius-md,8px);background:var(--accent,#4fd8eb);color:var(--accent-ink,#071224);cursor:pointer}.ds-send:hover{background:var(--accent-hover,#80e5f2)}"
+    },
+    {
+      "name": "Sidebar Row",
+      "kind": "nav",
+      "refersTo": "sidebar-item",
+      "description": "Group/user rows: rest, active wash, unread pill.",
+      "html": "<div class=\"ds-nav\"><button class=\"ds-row ds-on\"># net-lab</button><button class=\"ds-row ds-unread\"># study-group<span class=\"ds-pill\">2</span></button><button class=\"ds-row\"># general</button></div>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:1px;width:248px;background:var(--side,#0a1428);padding:8px}.ds-row{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border:0;border-radius:var(--radius-sm,6px);background:none;color:var(--mute,#a3b3cd);font-size:14px;text-align:left;cursor:pointer}.ds-row:hover{background:var(--raise,#15264a);color:var(--ink,#e8eef8)}.ds-row:focus-visible{outline:2px solid var(--accent,#4fd8eb);outline-offset:2px}.ds-unread{color:var(--ink,#e8eef8);font-weight:600}.ds-on,.ds-on:hover{background:var(--accent-soft,rgb(79 216 235 / .14));color:var(--accent,#4fd8eb);font-weight:600}"
+    },
+    {
+      "name": "Unread Pill",
+      "kind": "chip",
+      "refersTo": "unread-pill",
+      "description": "Aqua count pill on sidebar rows.",
+      "html": "<span class=\"ds-pill\">2</span>",
+      "css": ".ds-pill{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accent,#4fd8eb);color:var(--accent-ink,#071224);font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;display:inline-grid;place-items:center}"
+    },
+    {
+      "name": "Inline Join",
+      "kind": "button",
+      "refersTo": "button-join-inline",
+      "description": "Outlined Join on non-member group rows.",
+      "html": "<button class=\"ds-join\">Join</button>",
+      "css": ".ds-join{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";height:24px;padding:0 10px;border:1px solid var(--line-strong,#2b4372);border-radius:var(--radius-sm,6px);background:var(--side,#0a1428);color:var(--accent,#4fd8eb);font-size:12px;font-weight:600;cursor:pointer}.ds-join:hover{border-color:var(--accent,#4fd8eb);background:var(--accent-soft,rgb(79 216 235 / .14))}.ds-join:focus-visible{outline:2px solid var(--accent,#4fd8eb);outline-offset:2px}"
+    },
+    {
+      "name": "Message",
+      "kind": "custom",
+      "refersTo": "avatar",
+      "description": "Left-aligned message with hashed initial avatar.",
+      "html": "<div class=\"ds-msg\"><div class=\"ds-av\" style=\"background:#34548c\">A</div><div><div class=\"ds-mh\"><strong>aung</strong><span class=\"ds-faint\">you</span><time class=\"ds-faint\">03:03 PM</time></div><p>Why do we need framing on top of TCP?</p></div></div>",
+      "css": ".ds-msg{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";display:flex;gap:12px;padding:6px 24px 2px;font-size:14px;line-height:1.5}.ds-msg:hover{background:rgb(255 255 255 / .025)}.ds-av{width:32px;height:32px;border-radius:var(--radius-md,8px);display:grid;place-items:center;flex:none;color:#fff;font-weight:700;font-size:13px;margin-top:2px}.ds-mh{display:flex;align-items:baseline;gap:8px;color:var(--ink,#e8eef8)}.ds-mh strong{font-weight:600}.ds-faint{font-size:12px;color:var(--faint,#7f92b1);font-variant-numeric:tabular-nums}.ds-msg p{margin:0;max-width:72ch;color:var(--text,#d5deec)}"
+    },
+    {
+      "name": "Error Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Top-right async error toast; floats with the only shadow.",
+      "html": "<div class=\"ds-toast\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"8\" cy=\"8\" r=\"6.25\"/><path d=\"M8 5v3.5M8 11h.01\"/></svg><p>Group name already exists.</p><button aria-label=\"Dismiss\">×</button></div>",
+      "css": ".ds-toast{font-family:\"Inter Variable\",system-ui,sans-serif;font-feature-settings:\"cv11\",\"ss01\";width:360px;display:flex;align-items:flex-start;gap:10px;padding:12px 8px 12px 12px;border:1px solid var(--line-strong,#2b4372);border-radius:var(--radius-lg,10px);background:var(--raise,#15264a);box-shadow:0 12px 32px rgb(3 8 20 / .5);color:var(--ink,#e8eef8);font-size:13px;line-height:1.45}.ds-toast>svg{color:var(--err,#ff7b7b);margin-top:1px;flex:none}.ds-toast p{flex:1;margin:0}.ds-toast button{width:24px;height:24px;margin-top:-3px;border:0;border-radius:var(--radius-sm,6px);background:none;color:var(--mute,#a3b3cd);cursor:pointer}.ds-toast button:hover{background:var(--raise-hover,#1b2e57);color:var(--ink,#e8eef8)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Deep Water, One Light",
+    "overview": "Deepchat is a category-standard chat client played straight: one quiet sidebar, one message column, nothing decorative. The world is a rich deep-ocean navy that never falls to black, layered in three tonal steps (sidebar deeper than the room, raised fields lighter than both) and divided by 1px hairlines. A single flat aqua is the only light in the water; it marks actions, the current selection, and unread counts, always carrying navy text on top and never glowing.\n\nDensity is desktop-chat density: 32px rows, 56px headers, 14px body text, a 264px sidebar. Everything protocol-backed is visible at a glance; nothing is hidden behind novelty. The direction rejected novel metaphors (a transit-map concept) and the purple/glow AI-app look.\n\nErrors are placed where the action happened, never in a generic global slot unless no local place exists.",
+    "keyCharacteristics": [
+      "Navy tonal layering, no black, no gradients.",
+      "One flat aqua accent with navy ink on it; no glow.",
+      "Green means online and nothing else; red means error and nothing else.",
+      "Soft 6–10px corners, 1px lines, bundled Inter Variable.",
+      "Left-aligned message feed with hashed-colour initial avatars."
+    ],
+    "rules": [
+      {
+        "name": "The One Light Rule",
+        "body": "Aqua is the only accent. It fills actions and unread counts, tints the selection, and is never used as a glow or gradient.",
+        "section": "colors"
+      },
+      {
+        "name": "The Semantic Lock Rule",
+        "body": "Green is presence, red is error, aqua is selection/action/unread. None appears decoratively, and avatar fills stay within blues, slates and earth tones.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never Black Rule",
+        "body": "The darkest surface is Trench Navy; depth comes from navy steps, not black.",
+        "section": "colors"
+      },
+      {
+        "name": "The Weight Not Size Rule",
+        "body": "Distinguish by weight and the ink/mute/faint ladder; keep sizes within 11–16px inside the app, with 24px reserved for the connect heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Count Rule",
+        "body": "Counts, timestamps and host:port use `font-variant-numeric: tabular-nums`.",
+        "section": "typography"
+      },
+      {
+        "name": "The Float-Only Shadow Rule",
+        "body": "Only overlays that leave the layout flow (popover, toast) cast the shadow; rows, cards and fields never do.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** layer surfaces side → bg → raise and separate them with 1px hairlines.",
+      "**Do** put navy `accent-ink` text on every aqua fill.",
+      "**Do** place errors where the action happened: under the field, inside the create box, above the composer; toasts only for errors with no local home.",
+      "**Do** keep counts, times and host:port tabular.",
+      "**Do** honour reduced motion by zeroing movement and duration."
+    ],
+    "donts": [
+      "**Don't** use black, purple, gradients or glow; the direction rejected the purple/glow AI-app look.",
+      "**Don't** use green for anything but presence or red for anything but errors.",
+      "**Don't** cast shadows on in-flow surfaces; only the popover and toasts float.",
+      "**Don't** add a second accent colour.",
+      "**Don't** right-align your own messages into bubbles; the feed is left-aligned for everyone."
+    ]
+  }
+}

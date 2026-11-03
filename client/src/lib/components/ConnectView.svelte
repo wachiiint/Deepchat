@@ -1,5 +1,8 @@
 <script lang="ts">
-  type ConnectPayload = {
+  import { untrack } from "svelte";
+  import Icon from "./Icon.svelte";
+
+  export type ConnectPayload = {
     host: string;
     port: number;
     name: string;
@@ -8,178 +11,256 @@
   let {
     busy = false,
     error = "",
+    notice = "",
+    initial,
     onconnect,
   }: {
     busy?: boolean;
     error?: string;
+    notice?: string;
+    initial?: ConnectPayload | null;
     onconnect: (payload: ConnectPayload) => void | Promise<void>;
   } = $props();
 
-  let host = $state("127.0.0.1");
-  let port = $state("7878");
-  let name = $state("");
+  // Prefill once from the last attempt; later edits belong to the user.
+  const seed = untrack(() => initial);
+  let host = $state(seed?.host ?? "127.0.0.1");
+  let port = $state(String(seed?.port ?? 7878));
+  let name = $state(seed?.name ?? "");
+
+  const portValid = $derived.by(() => {
+    const n = Number(port);
+    return Number.isInteger(n) && n > 0 && n <= 65535;
+  });
+  // The backend reports name conflicts in prose; anything else is about reaching the server.
+  const nameError = $derived(/display name/i.test(error) ? error : "");
+  const serverError = $derived(error && !nameError ? error : "");
 
   async function handleSubmit(event: Event) {
     event.preventDefault();
-    const parsedPort = Number(port);
-    if (
-      !Number.isInteger(parsedPort) ||
-      parsedPort <= 0 ||
-      parsedPort > 65535
-    ) {
-      return;
-    }
-    await onconnect({ host: host.trim(), port: parsedPort, name: name.trim() });
+    if (!portValid || !name.trim() || !host.trim()) return;
+    await onconnect({
+      host: host.trim(),
+      port: Number(port),
+      name: name.trim(),
+    });
   }
 </script>
 
-<section class="connect">
-  <div class="card">
-    <p class="brand">Deepchat</p>
+<main class="connect">
+  <p class="brand">Deepchat</p>
+  <form onsubmit={handleSubmit} novalidate>
     <h1>Join the chat</h1>
     <p class="hint">
       Connect to your Deepchat server to chat with other users.
     </p>
 
-    <form onsubmit={handleSubmit}>
-      <label>
-        Display name
+    {#if notice}
+      <p class="banner" role="alert">
+        <Icon name="alert" />
+        <span>{notice}</span>
+      </p>
+    {/if}
+
+    <div class="field">
+      <label for="connect-name">Display name</label>
+      <input
+        id="connect-name"
+        bind:value={name}
+        placeholder="your unique name"
+        autocomplete="off"
+        spellcheck="false"
+        required
+        disabled={busy}
+        aria-invalid={nameError ? "true" : undefined}
+        aria-describedby={nameError ? "connect-name-error" : undefined}
+      />
+      {#if nameError}
+        <p class="error" id="connect-name-error" role="alert">{nameError}</p>
+      {/if}
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="connect-host">Host</label>
         <input
-          bind:value={name}
-          placeholder="your unique name"
+          id="connect-host"
+          bind:value={host}
+          placeholder="127.0.0.1"
+          autocomplete="off"
+          spellcheck="false"
           required
           disabled={busy}
+          aria-invalid={serverError ? "true" : undefined}
         />
-      </label>
-      <div class="row">
-        <label>
-          Host
-          <input
-            bind:value={host}
-            placeholder="127.0.0.1"
-            required
-            disabled={busy}
-          />
-        </label>
-        <label class="port">
-          Port
-          <input
-            bind:value={port}
-            type="number"
-            min="1"
-            max="65535"
-            required
-            disabled={busy}
-          />
-        </label>
       </div>
-      {#if error}
-        <p class="error" role="alert">{error}</p>
-      {/if}
-      <button type="submit" disabled={busy || !name.trim()}>
-        {busy ? "Connecting…" : "Connect"}
-      </button>
-    </form>
-  </div>
-</section>
+      <div class="field port">
+        <label for="connect-port">Port</label>
+        <input
+          id="connect-port"
+          bind:value={port}
+          inputmode="numeric"
+          autocomplete="off"
+          required
+          disabled={busy}
+          aria-invalid={serverError || !portValid ? "true" : undefined}
+        />
+      </div>
+    </div>
+    {#if serverError}
+      <p class="error" role="alert">{serverError}</p>
+    {:else if !portValid && port !== ""}
+      <p class="error">Port must be a number from 1 to 65535.</p>
+    {/if}
+
+    <button
+      type="submit"
+      class="submit"
+      disabled={busy || !name.trim() || !host.trim() || !portValid}
+    >
+      {busy ? "Connecting…" : "Connect"}
+    </button>
+  </form>
+</main>
 
 <style>
   .connect {
-    min-height: 100vh;
-    display: grid;
-    place-items: center;
-    padding: 2rem;
-    background:
-      radial-gradient(ellipse at top left, #d8ebe4 0%, transparent 55%),
-      radial-gradient(ellipse at bottom right, #e6dfd0 0%, transparent 50%),
-      #f3f0ea;
-  }
-
-  .card {
-    width: min(420px, 100%);
-    padding: 2rem;
-    border: 1px solid #cfc8bc;
-    background: rgba(255, 252, 247, 0.92);
-    box-shadow: 0 18px 40px rgba(40, 35, 25, 0.08);
-  }
-
-  .brand {
-    margin: 0 0 0.35rem;
-    font-family: "Fraunces", "Iowan Old Style", Georgia, serif;
-    font-size: 1.75rem;
-    letter-spacing: -0.02em;
-    color: #1f3d34;
-  }
-
-  h1 {
-    margin: 0 0 0.4rem;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: #2a2a28;
-  }
-
-  .hint {
-    margin: 0 0 1.4rem;
-    color: #6a655c;
-    font-size: 0.9rem;
+    position: relative;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    /* Fixed top offset: banners and errors grow the form downward without moving the heading. */
+    padding: max(32px, 22vh) 32px 32px;
+    overflow-y: auto;
+    background: var(--bg);
   }
 
   form {
+    width: min(360px, 100%);
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
   }
 
-  label {
+  .brand {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    font-size: 16px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .hint {
+    color: var(--mute);
+    margin: 6px 0 28px;
+  }
+
+  .banner {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    margin-bottom: 20px;
+    border-radius: var(--radius-md);
+    background: var(--err-soft);
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  .banner :global(svg) {
+    color: var(--err);
+    margin-top: 2px;
+  }
+
+  .field {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
-    font-size: 0.85rem;
-    color: #4a463e;
+    gap: 6px;
+    margin-bottom: 16px;
+    min-width: 0;
   }
 
   .row {
     display: grid;
-    grid-template-columns: 1fr 7rem;
-    gap: 0.75rem;
+    grid-template-columns: 1fr 96px;
+    gap: 8px;
+  }
+
+  .row .field {
+    margin-bottom: 0;
+  }
+
+  label {
+    font-size: 13px;
+    font-weight: 600;
   }
 
   input {
-    border: 1px solid #cfc8bc;
-    background: #fff;
-    padding: 0.65rem 0.75rem;
-    font: inherit;
-    color: #1f1e1b;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--raise);
+    color: var(--ink);
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  input::placeholder {
+    color: var(--faint);
   }
 
   input:focus {
-    outline: 2px solid #2f6f5e;
-    outline-offset: 1px;
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
-  button {
-    margin-top: 0.35rem;
-    border: none;
-    background: #1f3d34;
-    color: #f7f3eb;
-    padding: 0.75rem 1rem;
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
+  input[aria-invalid="true"] {
+    border-color: var(--err);
   }
 
-  button:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  button:not(:disabled):hover {
-    background: #2f6f5e;
+  input:disabled {
+    opacity: 0.6;
   }
 
   .error {
-    margin: 0;
-    color: #9b2c2c;
-    font-size: 0.9rem;
+    color: var(--err);
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: 6px;
+  }
+
+  .field .error {
+    margin-top: 0;
+  }
+
+  .submit {
+    height: 40px;
+    margin-top: 24px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 650;
+    transition: background-color 120ms ease;
+  }
+
+  .submit:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .submit:disabled {
+    background: var(--raise);
+    color: var(--faint);
   }
 </style>

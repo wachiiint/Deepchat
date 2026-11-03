@@ -4,3 +4,8 @@ target/
 # developer e.g. add context, spec, temp.txt
 temp
 
+# impeccable
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/questions/
+.impeccable/config.local.json
