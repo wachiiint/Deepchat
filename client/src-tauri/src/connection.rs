@@ -78,6 +78,7 @@ pub struct Connection {
     writer: Arc<AsyncMutex<OwnedWriteHalf>>,
     alive: Arc<AtomicBool>,
     reader: JoinHandle<()>,
+    notify: Notify,
 }
 
 impl Drop for Connection {
@@ -243,8 +244,8 @@ impl Connection {
         let (mut rd, wr) = socket.into_split();
         let writer = Arc::new(AsyncMutex::new(wr));
         let alive = Arc::new(AtomicBool::new(true));
-        let (reader_model, reader_writer, reader_alive) =
-            (model.clone(), writer.clone(), alive.clone());
+        let (reader_model, reader_writer, reader_alive, reader_notify) =
+            (model.clone(), writer.clone(), alive.clone(), notify.clone());
         let reader = tokio::spawn(async move {
             let reason = loop {
                 match read_frame::<_, ServerMsg>(&mut rd).await {
@@ -262,15 +263,17 @@ impl Connection {
                     }
                     Ok(Some(msg)) => {
                         if let Ok(mut model) = reader_model.lock() {
-                            model.apply(msg, &notify);
+                            model.apply(msg, &reader_notify);
                         }
                     }
                     Ok(None) => break "Server disconnected. Connect again to continue.".into(),
                     Err(e) => break e.to_string(),
                 }
             };
-            reader_alive.store(false, Ordering::Release);
-            notify(Update::Disconnected(reason));
+            // `swap`: if `send` already tore the connection down, it reported the disconnect.
+            if reader_alive.swap(false, Ordering::AcqRel) {
+                reader_notify(Update::Disconnected(reason));
+            }
         });
 
         Ok((
@@ -279,6 +282,7 @@ impl Connection {
                 writer,
                 alive,
                 reader,
+                notify,
             },
             snapshot,
         ))
@@ -295,11 +299,14 @@ impl Connection {
         })
         .await
         .unwrap_or_else(|_| Err("Sending timed out. Reconnect before sending again.".into()));
-        if result.is_err() {
-            // A cancelled/failed frame write may be partial; never reuse that stream.
-            self.alive.store(false, Ordering::Release);
+        // A cancelled/failed frame write may be partial; never reuse that stream.
+        // Only the first to flip `alive` tears down and reports, so the UI hears it once.
+        if let Err(e) = &result
+            && self.alive.swap(false, Ordering::AcqRel)
+        {
             self.reader.abort();
             let _ = self.writer.lock().await.shutdown().await;
+            (self.notify)(Update::Disconnected(e.clone()));
         }
         result
     }
