@@ -1,7 +1,5 @@
-# Tauri + SvelteKit + TypeScript
+# Deepchat desktop client
 
-This template should help get you started developing with Tauri, SvelteKit and TypeScript in Vite.
+Start the TCP server from the repository root with `cargo run -p server`, then run `pnpm install` and `pnpm tauri dev` in this directory. Connect to `127.0.0.1:7878` locally, or use the server machine's address.
 
-## Recommended IDE Setup
-
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+Checks: `pnpm check`, `pnpm build`, and `cargo test --workspace` from the repository root for Rust tests.

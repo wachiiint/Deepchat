@@ -2,6 +2,9 @@ mod hub;
 mod session;
 mod state;
 
+#[cfg(test)]
+mod group_tcp_tests;
+
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 

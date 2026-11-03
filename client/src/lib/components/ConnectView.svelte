@@ -16,13 +16,17 @@
   } = $props();
 
   let host = $state("127.0.0.1");
-  let port = $state("8080");
+  let port = $state("7878");
   let name = $state("");
 
   async function handleSubmit(event: Event) {
     event.preventDefault();
     const parsedPort = Number(port);
-    if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+    if (
+      !Number.isInteger(parsedPort) ||
+      parsedPort <= 0 ||
+      parsedPort > 65535
+    ) {
       return;
     }
     await onconnect({ host: host.trim(), port: parsedPort, name: name.trim() });
@@ -33,21 +37,40 @@
   <div class="card">
     <p class="brand">Deepchat</p>
     <h1>Join the chat</h1>
-    <p class="hint">Stub mode — Tauri commands seed demo users and groups.</p>
+    <p class="hint">
+      Connect to your Deepchat server to chat with other users.
+    </p>
 
     <form onsubmit={handleSubmit}>
       <label>
         Display name
-        <input bind:value={name} placeholder="your unique name" required disabled={busy} />
+        <input
+          bind:value={name}
+          placeholder="your unique name"
+          required
+          disabled={busy}
+        />
       </label>
       <div class="row">
         <label>
           Host
-          <input bind:value={host} placeholder="127.0.0.1" required disabled={busy} />
+          <input
+            bind:value={host}
+            placeholder="127.0.0.1"
+            required
+            disabled={busy}
+          />
         </label>
         <label class="port">
           Port
-          <input bind:value={port} type="number" min="1" max="65535" required disabled={busy} />
+          <input
+            bind:value={port}
+            type="number"
+            min="1"
+            max="65535"
+            required
+            disabled={busy}
+          />
         </label>
       </div>
       {#if error}
