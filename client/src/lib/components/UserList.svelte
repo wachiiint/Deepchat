@@ -3,33 +3,45 @@
     users = [],
     currentUser = "",
     selectedPeer = null,
+    unread = {},
     onselect,
   }: {
     users?: string[];
     currentUser?: string;
     selectedPeer?: string | null;
+    unread?: Record<string, number>;
     onselect: (peer: string) => void | Promise<void>;
   } = $props();
 </script>
 
-<section class="panel">
-  <header>
-    <h2>Active users</h2>
-    <span class="count">{users.length}</span>
-  </header>
+<section aria-labelledby="users-heading">
+  <h2 id="users-heading">
+    <span>Active users</span>
+    <span class="total">{users.length}</span>
+  </h2>
   <ul>
     {#each users as user (user)}
+      {@const me = user === currentUser}
+      {@const count = unread[user] ?? 0}
       <li>
         <button
           type="button"
-          class:selected={selectedPeer === user}
-          class:me={user === currentUser}
-          disabled={user === currentUser}
+          class="item"
+          class:on={selectedPeer === user}
+          class:unread={count > 0}
+          class:me
+          disabled={me}
+          aria-current={selectedPeer === user ? "true" : undefined}
           onclick={() => onselect(user)}
         >
+          <span class="dot" aria-hidden="true"></span>
           <span class="name">{user}</span>
-          {#if user === currentUser}
-            <span class="badge">you</span>
+          {#if me}
+            <span class="you">you</span>
+          {:else if count > 0}
+            <span class="count" aria-label={`${count} unread`}
+              >{count > 99 ? "99+" : count}</span
+            >
           {/if}
         </button>
       </li>
@@ -40,79 +52,107 @@
 </section>
 
 <style>
-  .panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.85rem 1rem 0.5rem;
+  section {
+    padding: 16px 8px 8px;
   }
 
   h2 {
-    margin: 0;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #6a655c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    padding: 0 12px 0 8px;
+    margin-bottom: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--faint);
   }
 
-  .count {
-    font-size: 0.8rem;
-    color: #8a8376;
+  .total {
+    font-variant-numeric: tabular-nums;
   }
 
   ul {
     list-style: none;
-    margin: 0;
-    padding: 0 0.5rem 0.75rem;
-    overflow: auto;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
 
-  button {
+  .item {
     width: 100%;
+    height: 32px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    border: none;
-    background: transparent;
-    padding: 0.55rem 0.65rem;
+    gap: 10px;
+    padding: 0 8px 0 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--mute);
     text-align: left;
-    font: inherit;
-    color: #1f1e1b;
-    cursor: pointer;
   }
 
-  button:hover:not(:disabled) {
-    background: #ebe6dc;
+  .item:hover:not(:disabled) {
+    background: var(--raise);
+    color: var(--ink);
   }
 
-  button.selected {
-    background: #d8ebe4;
-    color: #1f3d34;
+  .item.unread {
+    color: var(--ink);
+    font-weight: 600;
   }
 
-  button.me {
+  .item.on,
+  .item.on:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .item.me {
     cursor: default;
-    opacity: 0.85;
   }
 
-  .badge {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #2f6f5e;
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+    flex: none;
+  }
+
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .you {
+    font-size: 12px;
+    color: var(--faint);
+  }
+
+  .count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    display: grid;
+    place-items: center;
   }
 
   .empty {
-    padding: 0.75rem;
-    color: #8a8376;
-    font-size: 0.9rem;
+    padding: 4px 12px;
+    color: var(--faint);
+    font-size: 13px;
   }
 </style>

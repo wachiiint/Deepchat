@@ -1,73 +1,122 @@
 <script lang="ts">
   import type { Group } from "$lib/types";
+  import Icon from "./Icon.svelte";
 
   let {
     groups = [],
     currentUser = "",
     selectedGroupId = null,
+    unread = {},
+    busy = false,
+    creating = false,
+    createError = "",
+    createOpen = $bindable(false),
     onselect,
     onjoin,
     oncreate,
-    onleave,
-    busy = false,
+    oncreatecancel,
   }: {
     groups?: Group[];
-    busy?: boolean;
-    onleave: (groupId: string) => void | Promise<void>;
     currentUser?: string;
     selectedGroupId?: string | null;
+    unread?: Record<string, number>;
+    busy?: boolean;
+    creating?: boolean;
+    createError?: string;
+    createOpen?: boolean;
     onselect: (group: Group) => void | Promise<void>;
     onjoin: (groupId: string) => void | Promise<void>;
     oncreate: (name: string) => void | Promise<void>;
+    oncreatecancel: () => void;
   } = $props();
 
   let newGroupName = $state("");
+  let inputEl: HTMLInputElement | undefined = $state();
+
+  $effect(() => {
+    if (createOpen) inputEl?.focus();
+    else newGroupName = "";
+  });
+
+  // A rejected name stays selected so it can be retyped at once.
+  $effect(() => {
+    if (createError) inputEl?.select();
+  });
 
   async function handleCreate(event: Event) {
     event.preventDefault();
     const name = newGroupName.trim();
-    if (!name) return;
+    if (!name || creating) return;
     await oncreate(name);
-    newGroupName = "";
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      oncreatecancel();
+    }
   }
 </script>
 
-<section class="panel">
-  <header>
-    <h2>Groups</h2>
-    <span class="count">{groups.length}</span>
-  </header>
-
-  <form class="create" onsubmit={handleCreate}>
-    <input
-      bind:value={newGroupName}
-      aria-label="New group name"
-      placeholder="New group name"
-      disabled={busy}
-    />
-    <button type="submit" disabled={busy || !newGroupName.trim()}>Create</button
+<section aria-labelledby="groups-heading">
+  <h2 id="groups-heading">
+    <span>Groups</span>
+    <button
+      type="button"
+      class="icon"
+      aria-label="Create group"
+      title="Create group"
+      aria-expanded={createOpen}
+      onclick={() => (createOpen ? oncreatecancel() : (createOpen = true))}
     >
-  </form>
+      <Icon name={createOpen ? "close" : "plus"} />
+    </button>
+  </h2>
+
+  {#if createOpen}
+    <form class="create" onsubmit={handleCreate}>
+      <input
+        bind:this={inputEl}
+        bind:value={newGroupName}
+        aria-label="New group name"
+        placeholder="New group name"
+        autocomplete="off"
+        spellcheck="false"
+        disabled={creating}
+        aria-invalid={createError ? "true" : undefined}
+        aria-describedby={createError ? "create-error" : undefined}
+        onkeydown={handleKeydown}
+      />
+      <button type="submit" disabled={creating || !newGroupName.trim()}>
+        {creating ? "Creating…" : "Create"}
+      </button>
+      {#if createError}
+        <p class="error" id="create-error" role="alert">{createError}</p>
+      {/if}
+    </form>
+  {/if}
 
   <ul>
     {#each groups as group (group.id)}
       {@const isMember = group.members.includes(currentUser)}
-      <li>
+      {@const count = unread[group.id] ?? 0}
+      <li class:member={isMember}>
         <button
           type="button"
-          class="group"
-          class:selected={selectedGroupId === group.id}
-          disabled={busy || !isMember}
+          class="item"
+          class:on={selectedGroupId === group.id}
+          class:unread={count > 0}
+          aria-current={selectedGroupId === group.id ? "true" : undefined}
+          title={`${group.members.length} member${group.members.length === 1 ? "" : "s"}: ${group.members.join(", ")}`}
           onclick={() => onselect(group)}
         >
-          <span class="title-row">
-            <span class="name">{group.name}</span>
-            {#if isMember}
-              <span class="badge">joined</span>
-            {/if}
-          </span>
-          <span class="members">Created by {group.creator}</span>
-          <span class="members">{group.members.join(", ")}</span>
+          <Icon name="hash" />
+          <span class="name">{group.name}</span>
+          {#if count > 0}
+            <span class="count" aria-label={`${count} unread`}
+              >{count > 99 ? "99+" : count}</span
+            >
+          {/if}
         </button>
         {#if !isMember}
           <button
@@ -75,16 +124,10 @@
             class="join"
             disabled={busy}
             onclick={() => onjoin(group.id)}
+            aria-label={`Join ${group.name}`}
           >
             Join
           </button>
-        {:else}
-          <button
-            type="button"
-            class="join"
-            disabled={busy}
-            onclick={() => onleave(group.id)}>Leave</button
-          >
         {/if}
       </li>
     {:else}
@@ -94,147 +137,192 @@
 </section>
 
 <style>
-  .panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    border-top: 1px solid #ddd6ca;
-  }
-
-  header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.85rem 1rem 0.5rem;
+  section {
+    padding: 16px 8px 4px;
   }
 
   h2 {
-    margin: 0;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #6a655c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    padding: 0 4px 0 8px;
+    margin-bottom: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--faint);
   }
 
-  .count {
-    font-size: 0.8rem;
-    color: #8a8376;
+  .icon {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--mute);
+  }
+
+  .icon:hover {
+    background: var(--raise);
+    color: var(--ink);
   }
 
   .create {
     display: grid;
     grid-template-columns: 1fr auto;
-    gap: 0.4rem;
-    padding: 0 0.75rem 0.75rem;
+    gap: 6px;
+    padding: 4px 0 8px;
   }
 
-  input {
-    border: 1px solid #cfc8bc;
-    background: #fff;
-    padding: 0.45rem 0.55rem;
-    font: inherit;
+  .create input {
     min-width: 0;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--raise);
+    color: var(--ink);
+  }
+
+  .create input::placeholder {
+    color: var(--faint);
+  }
+
+  .create input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .create input[aria-invalid="true"] {
+    border-color: var(--err);
   }
 
   .create button {
-    border: none;
-    background: #1f3d34;
-    color: #f7f3eb;
-    padding: 0.45rem 0.7rem;
-    font: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
+    height: 32px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 13px;
+    font-weight: 650;
   }
 
   .create button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    background: var(--raise);
+    color: var(--faint);
+  }
+
+  .error {
+    grid-column: 1 / -1;
+    color: var(--err);
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 0 2px;
   }
 
   ul {
     list-style: none;
-    margin: 0;
-    padding: 0 0.5rem 0.75rem;
-    overflow: auto;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
 
   li {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.35rem;
-    align-items: stretch;
-    margin-bottom: 0.35rem;
+    position: relative;
   }
 
-  .group {
-    border: none;
-    background: transparent;
-    padding: 0.55rem 0.65rem;
-    text-align: left;
-    font: inherit;
-    color: #1f1e1b;
-    cursor: pointer;
-    min-width: 0;
-    overflow-wrap: anywhere;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-  }
-
-  .group:disabled {
-    cursor: default;
-  }
-
-  .group:hover:not(:disabled) {
-    background: #ebe6dc;
-  }
-
-  .group.selected {
-    background: #d8ebe4;
-  }
-
-  .title-row {
+  .item {
+    width: 100%;
+    height: 32px;
     display: flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 8px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--faint);
+    text-align: left;
   }
 
-  .name {
+  li.member .item {
+    color: var(--mute);
+  }
+
+  li:not(.member) .item {
+    padding-right: 64px;
+  }
+
+  .item:hover {
+    background: var(--raise);
+    color: var(--ink);
+  }
+
+  .item.unread {
+    color: var(--ink);
     font-weight: 600;
   }
 
-  .members {
-    font-size: 0.8rem;
-    color: #6a655c;
+  .item.on,
+  .item.on:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
   }
 
-  .badge {
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #2f6f5e;
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    display: grid;
+    place-items: center;
   }
 
   .join {
-    border: 1px solid #cfc8bc;
-    background: #fff;
-    padding: 0.35rem 0.55rem;
-    font: inherit;
-    font-size: 0.8rem;
-    cursor: pointer;
-    align-self: center;
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: var(--side);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
   }
 
-  .join:hover {
-    border-color: #2f6f5e;
-    color: #1f3d34;
+  .join:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .join:disabled {
+    color: var(--faint);
   }
 
   .empty {
-    padding: 0.75rem;
-    color: #8a8376;
-    font-size: 0.9rem;
-    grid-column: 1 / -1;
+    padding: 4px 8px;
+    color: var(--faint);
+    font-size: 13px;
   }
 </style>
