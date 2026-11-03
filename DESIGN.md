@@ -277,7 +277,7 @@ Soft rectangles throughout. Small controls (sidebar rows, ghost and icon buttons
 - **Error / Disabled:** `aria-invalid` turns the border red with a 12px red message directly under the field; disabled fields drop to 0.6 opacity.
 
 ### Composer
-A 10px-radius raised bar holding a borderless input and the send button; `focus-within` gives the whole bar the aqua border and ring. Send errors render as a red 12px line with an alert icon above the bar, and the draft is kept. When a DM peer is offline a mute note "{name} is offline." takes the same slot. Disabled state drops the bar to 0.6 opacity.
+A 10px-radius raised bar holding a borderless auto-growing textarea (one line at rest, up to 144px, then it scrolls) and the send button, bottom-aligned; `focus-within` gives the whole bar the aqua border and ring. Enter sends and Shift+Enter inserts a newline; Enter is ignored while an IME is composing. Send errors render as a red 12px line with an alert icon above the bar, and the draft is kept. When a DM peer is offline a mute note "{name} is offline." takes the same slot. Disabled state drops the bar to 0.6 opacity.
 
 ### Navigation (Sidebar Lists)
 - **Rows:** 32px, `sm` radius, transparent. Groups lead with a `#` glyph; users lead with an 8px green dot.
@@ -288,6 +288,9 @@ A 10px-radius raised bar holding a borderless input and the send button; `focus-
 
 ### Message
 Left-aligned for everyone, including you. 32px initial avatar (hashed fill, white 13px/700 initial), a header of name (600) + faint "you" tag + faint tabular time, then body text in the `text` colour, pre-wrapped, capped at 72ch. Row hover adds a near-invisible white wash. Continuations drop the avatar and header.
+
+### Membership Notice
+A faint 12px line in the message feed, "mya joined the group" or "mya left the group" with a faint time, name at 600. It sits on the message text column (68px left, aligned with message bodies) with no avatar, tinted `faint` so it never competes with messages. Derived client-side from group snapshots, shown only for groups you belong to, kept in memory (lost on reconnect), and never counted as unread. A notice breaks message grouping, so the next message shows its header again.
 
 ### Room Header
 56px bar with `#` glyph (faint) + 16px/650 title, 13px mute meta ("3 members · Created by mya", or online/offline status with a dot for DMs), and ghost actions on the right. Members opens a 240px popover (raise, strong hairline, `lg`, float shadow) listing 36px rows with 24px avatars and faint 11px tags.

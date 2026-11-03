@@ -13,6 +13,15 @@ export type Message = {
   timestamp: number;
 };
 
+// A membership change seen while a group was open. Lives only in the frontend.
+export type RoomEvent = {
+  id: string;
+  roomId: string;
+  kind: "joined" | "left";
+  user: string;
+  timestamp: number;
+};
+
 export type ConnectResult = {
   name: string;
   users: string[];

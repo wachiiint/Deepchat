@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import type { UnlistenFn } from "@tauri-apps/api/event";
   import * as chatApi from "$lib/chatApi";
-  import type { ActiveRoom, Group, Message } from "$lib/types";
+  import type { ActiveRoom, Group, Message, RoomEvent } from "$lib/types";
   import { avatarFill, initial } from "$lib/avatar";
   import { toasts } from "$lib/toasts.svelte";
   import ConnectView, {
@@ -36,6 +36,9 @@
   // Unread counts for rooms that are not open: groups by room id, private chats by peer name.
   let groupUnread = $state<Record<string, number>>({});
   let peerUnread = $state<Record<string, number>>({});
+  // Join/leave notices per group id, derived by diffing group snapshots. Never persisted.
+  let roomEvents = $state<Record<string, RoomEvent[]>>({});
+  let nextEventId = 1;
 
   let pendingGroup = $state<string | null>(null);
   let pendingAction = $state<"create" | "join" | null>(null);
@@ -93,6 +96,7 @@
     groups = [];
     groupUnread = {};
     peerUnread = {};
+    roomEvents = {};
     createOpen = false;
     createError = "";
     toasts.clearAll();
@@ -102,8 +106,43 @@
     toasts.push(String(e));
   }
 
+  // Diff two group snapshots into join/leave notices. Only groups we belonged to in both
+  // snapshots produce notices; our own join/leave, and deleted groups, drop the record,
+  // matching how the backend drops that room's message history.
+  function trackMembership(prev: Group[], next: Group[]) {
+    const updated: Record<string, RoomEvent[]> = {};
+    const now = Date.now();
+    for (const group of next) {
+      const before = prev.find((g) => g.id === group.id);
+      if (
+        !before ||
+        !before.members.includes(currentUser) ||
+        !group.members.includes(currentUser)
+      )
+        continue;
+      const events = [...(roomEvents[group.id] ?? [])];
+      const note = (kind: RoomEvent["kind"], user: string) =>
+        events.push({
+          id: String(nextEventId++),
+          roomId: group.id,
+          kind,
+          user,
+          timestamp: now,
+        });
+      for (const user of group.members)
+        if (user !== currentUser && !before.members.includes(user))
+          note("joined", user);
+      for (const user of before.members)
+        if (user !== currentUser && !group.members.includes(user))
+          note("left", user);
+      if (events.length) updated[group.id] = events;
+    }
+    roomEvents = updated;
+  }
+
   function updateGroups(next: Group[]) {
     groupsRevision++;
+    trackMembership(groups, next);
     groups = next;
     if (
       activeRoom?.kind === "group" &&
@@ -406,6 +445,7 @@
           room={activeRoom}
           group={activeGroup}
           {messages}
+          events={activeRoom ? (roomEvents[activeRoom.id] ?? []) : []}
           {currentUser}
           {busy}
           {peerOnline}

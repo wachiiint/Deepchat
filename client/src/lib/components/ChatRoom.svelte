@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ActiveRoom, Group, Message } from "$lib/types";
+  import type { ActiveRoom, Group, Message, RoomEvent } from "$lib/types";
   import { avatarFill, initial } from "$lib/avatar";
   import Icon from "./Icon.svelte";
 
@@ -7,6 +7,7 @@
     room = null,
     group = null,
     messages = [],
+    events = [],
     currentUser = "",
     busy = false,
     peerOnline = true,
@@ -18,6 +19,7 @@
     room?: ActiveRoom | null;
     group?: Group | null;
     messages?: Message[];
+    events?: RoomEvent[];
     currentUser?: string;
     busy?: boolean;
     peerOnline?: boolean;
@@ -36,33 +38,60 @@
   const GROUP_GAP_MS = 5 * 60 * 1000;
   const canSend = $derived(!!room && peerOnline);
 
-  type Row = { message: Message; continued: boolean; day: string | null };
+  type Row =
+    | {
+        kind: "message";
+        key: string;
+        message: Message;
+        continued: boolean;
+        day: string | null;
+      }
+    | { kind: "event"; key: string; event: RoomEvent; day: string | null };
 
   const rows = $derived.by(() => {
+    // Messages first on a tie so "mya joined" never precedes the message that caused it.
+    const timeline = [
+      ...messages.map((message) => ({ at: message.timestamp, message })),
+      ...events.map((event) => ({ at: event.timestamp, event })),
+    ].sort((a, b) => a.at - b.at);
+
     const out: Row[] = [];
     let prev: Message | null = null;
     let prevDay = "";
-    for (const message of messages) {
-      const day = new Date(message.timestamp).toDateString();
-      const newDay = day !== prevDay;
+    for (const item of timeline) {
+      const day = new Date(item.at).toDateString();
+      const dayLabelText = day !== prevDay ? dayLabel(item.at) : null;
+      prevDay = day;
+      if ("event" in item) {
+        out.push({
+          kind: "event",
+          key: `event:${item.event.id}`,
+          event: item.event,
+          day: dayLabelText,
+        });
+        prev = null;
+        continue;
+      }
+      const { message } = item;
       const continued =
-        !newDay &&
+        dayLabelText === null &&
         prev !== null &&
         prev.sender === message.sender &&
         message.timestamp - prev.timestamp < GROUP_GAP_MS;
       out.push({
+        kind: "message",
+        key: message.id,
         message,
         continued,
-        day: newDay ? dayLabel(message.timestamp) : null,
+        day: dayLabelText,
       });
       prev = message;
-      prevDay = day;
     }
     return out;
   });
 
   $effect(() => {
-    messages;
+    rows;
     if (windowEl) windowEl.scrollTop = windowEl.scrollHeight;
   });
 
@@ -206,37 +235,46 @@
 
     <div class="window" bind:this={windowEl}>
       <div class="feed">
-        {#each rows as { message, continued, day } (message.id)}
-          {#if day}
-            <p class="day"><span>{day}</span></p>
+        {#each rows as row (row.key)}
+          {#if row.day}
+            <p class="day"><span>{row.day}</span></p>
           {/if}
-          <article class="msg" class:continued>
-            {#if continued}
-              <span class="gutter"
-                ><time>{formatTime(message.timestamp)}</time></span
-              >
-            {:else}
-              <span
-                class="av"
-                style:background={avatarFill(message.sender)}
-                aria-hidden="true"
-              >
-                {initial(message.sender)}
-              </span>
-            {/if}
-            <div class="body">
-              {#if !continued}
-                <header>
-                  <strong>{message.sender}</strong>
-                  {#if message.sender === currentUser}<span class="you"
-                      >you</span
-                    >{/if}
-                  <time>{formatTime(message.timestamp)}</time>
-                </header>
+          {#if row.kind === "event"}
+            <p class="event">
+              <strong>{row.event.user}</strong>
+              {row.event.kind === "joined" ? "joined" : "left"} the group
+              <time>{formatTime(row.event.timestamp)}</time>
+            </p>
+          {:else}
+            {@const { message, continued } = row}
+            <article class="msg" class:continued>
+              {#if continued}
+                <span class="gutter"
+                  ><time>{formatTime(message.timestamp)}</time></span
+                >
+              {:else}
+                <span
+                  class="av"
+                  style:background={avatarFill(message.sender)}
+                  aria-hidden="true"
+                >
+                  {initial(message.sender)}
+                </span>
               {/if}
-              <p>{message.text}</p>
-            </div>
-          </article>
+              <div class="body">
+                {#if !continued}
+                  <header>
+                    <strong>{message.sender}</strong>
+                    {#if message.sender === currentUser}<span class="you"
+                        >you</span
+                      >{/if}
+                    <time>{formatTime(message.timestamp)}</time>
+                  </header>
+                {/if}
+                <p>{message.text}</p>
+              </div>
+            </article>
+          {/if}
         {:else}
           <p class="empty-msg">No messages yet. Say hello.</p>
         {/each}
@@ -448,6 +486,16 @@
     background: var(--line);
   }
 
+  .event {
+    /* Aligns with message text: 24px page gutter + 32px avatar + 12px gap. */
+    padding: 4px 24px 4px 68px;
+    color: var(--faint);
+    font-size: 12px;
+  }
+
+  .event strong {
+    font-weight: 600;
+  }
   .msg {
     display: flex;
     gap: 12px;
