@@ -29,7 +29,7 @@
 
   let draft = $state("");
   let windowEl: HTMLDivElement | undefined = $state();
-  let inputEl: HTMLInputElement | undefined = $state();
+  let inputEl: HTMLTextAreaElement | undefined = $state();
   let membersOpen = $state(false);
   let membersEl: HTMLDivElement | undefined = $state();
 
@@ -94,12 +94,33 @@
     });
   }
 
-  async function handleSend(event: Event) {
-    event.preventDefault();
+  // Grow with the draft up to the CSS max-height; shrink back when cleared.
+  $effect(() => {
+    draft;
+    if (!inputEl) return;
+    inputEl.style.height = "auto";
+    inputEl.style.height = `${inputEl.scrollHeight}px`;
+  });
+
+  async function submit() {
     const text = draft.trim();
     if (!text || !canSend) return;
     if (await onsend(text)) draft = "";
     inputEl?.focus();
+  }
+
+  function handleSubmit(event: Event) {
+    event.preventDefault();
+    void submit();
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    // Enter sends, Shift+Enter inserts a newline. While an IME is composing
+    // (Burmese, CJK), Enter confirms the candidate and must not send.
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    void submit();
   }
 
   function handleWindowClick(event: MouseEvent) {
@@ -222,7 +243,7 @@
       </div>
     </div>
 
-    <form class="composer" onsubmit={handleSend}>
+    <form class="composer" onsubmit={handleSubmit}>
       {#if sendError}
         <p class="send-error" role="alert">
           <Icon name="alert" size={14} />{sendError}
@@ -231,15 +252,16 @@
         <p class="send-note">{room.title} is offline.</p>
       {/if}
       <div class="box" class:disabled={!canSend}>
-        <input
+        <textarea
           bind:this={inputEl}
           bind:value={draft}
+          rows="1"
           aria-label="Message"
           placeholder="Type a message…"
           disabled={!canSend}
           autocomplete="off"
           oninput={() => sendError && oneditdraft()}
-        />
+          onkeydown={handleKeydown}></textarea>
         <button
           type="submit"
           class="send"
@@ -539,7 +561,7 @@
 
   .box {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 8px;
     padding: 6px 6px 6px 14px;
     border: 1px solid var(--line-strong);
@@ -559,17 +581,22 @@
     opacity: 0.6;
   }
 
-  .box input {
+  .box textarea {
     flex: 1;
     min-width: 0;
-    height: 32px;
+    min-height: 32px;
+    max-height: 144px;
+    padding: 6px 0;
     border: 0;
     outline: none;
+    resize: none;
+    overflow-y: auto;
     background: none;
     color: var(--ink);
+    line-height: 20px;
   }
 
-  .box input::placeholder {
+  .box textarea::placeholder {
     color: var(--faint);
   }
 
