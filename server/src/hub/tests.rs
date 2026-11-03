@@ -258,7 +258,7 @@ fn create_broadcasts_creator_only_and_duplicate_is_rejected() {
     h.send(&a, create("g1"));
     let expected = groups(&[("g1", "a", &["a"])]);
     for client in [&mut a, &mut b, &mut c] {
-        assert_eq!(client.drain(), [expected.clone()]);
+        assert_eq!(client.drain(), std::slice::from_ref(&expected));
     }
     idle.assert_silent();
     h.send(&b, create("g1"));
@@ -278,7 +278,7 @@ fn joining_is_explicit_sorted_and_idempotent() {
     h.send(&a, join_group("g1"));
     let expected = groups(&[("g1", "b", &["a", "b"])]);
     for client in [&mut a, &mut b, &mut c] {
-        assert_eq!(client.drain(), [expected.clone()]);
+        assert_eq!(client.drain(), std::slice::from_ref(&expected));
     }
     h.send(&a, join_group("g1"));
     a.assert_silent();
@@ -324,7 +324,7 @@ fn messages_reach_only_members_including_sender() {
         from: "a".into(),
         text: "hello".into(),
     };
-    assert_eq!(a.drain(), [msg.clone()]);
+    assert_eq!(a.drain(), std::slice::from_ref(&msg));
     assert_eq!(b.drain(), [msg]);
     c.assert_silent();
     h.send(&c, say("g1", "intrusion"));
@@ -398,7 +398,7 @@ fn leaving_updates_everyone_closes_membership_and_deletes_last_member_group() {
     h.send(&a, leave("g1"));
     let expected = groups(&[("g1", "a", &["b"])]);
     for client in [&mut a, &mut b, &mut c] {
-        assert_eq!(client.drain(), [expected.clone()]);
+        assert_eq!(client.drain(), std::slice::from_ref(&expected));
     }
     h.send(&a, say("g1", "hi"));
     assert_eq!(a.drain(), [error(ErrorKind::NotMember)]);
