@@ -42,6 +42,9 @@ async fn connect(
         connection::Update::GroupDeleted(group_id) => {
             let _ = app.emit("group-deleted", group_id);
         }
+        connection::Update::Typing(typing) => {
+            let _ = app.emit("typing", typing);
+        }
         connection::Update::Message(message) => {
             let _ = app.emit("message-received", message);
         }
@@ -125,6 +128,16 @@ async fn send_message(
     connection.send(msg).await
 }
 
+/// Best-effort signal while the user types. Undeliverable rooms are skipped silently.
+#[tauri::command]
+async fn send_typing(room_id: String, state: State<'_, ChatState>) -> Result<(), String> {
+    let connection = connection(&state)?;
+    match connection.typing(&room_id)? {
+        Some(msg) => connection.send(msg).await,
+        None => Ok(()),
+    }
+}
+
 #[tauri::command]
 fn get_messages(
     room_id: String,
@@ -155,6 +168,7 @@ pub fn run() {
             delete_group,
             open_private,
             send_message,
+            send_typing,
             get_messages
         ])
         .run(tauri::generate_context!())

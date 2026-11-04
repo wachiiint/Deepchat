@@ -8,11 +8,13 @@
     group = null,
     messages = [],
     events = [],
+    typers = [],
     currentUser = "",
     busy = false,
     peerOnline = true,
     sendError = "",
     onsend,
+    ontyping,
     onleave,
     ondelete,
     oneditdraft,
@@ -21,11 +23,13 @@
     group?: Group | null;
     messages?: Message[];
     events?: RoomEvent[];
+    typers?: string[];
     currentUser?: string;
     busy?: boolean;
     peerOnline?: boolean;
     sendError?: string;
     onsend: (text: string) => Promise<boolean>;
+    ontyping: () => void;
     onleave: (groupId: string) => void | Promise<void>;
     ondelete: (group: Group) => void;
     oneditdraft: () => void;
@@ -37,8 +41,21 @@
   let membersOpen = $state(false);
   let membersEl: HTMLDivElement | undefined = $state();
 
+  // At most one typing signal per throttle window; the receiver's lease is longer.
+  const TYPING_THROTTLE_MS = 2000;
+  let lastTypingAt = 0;
+
   const GROUP_GAP_MS = 5 * 60 * 1000;
   const canSend = $derived(!!room && peerOnline);
+  const typingLabel = $derived(
+    typers.length === 0
+      ? ""
+      : typers.length === 1
+        ? `${typers[0]} is typing…`
+        : typers.length === 2
+          ? `${typers[0]} and ${typers[1]} are typing…`
+          : "Several people are typing…",
+  );
 
   type Row =
     | {
@@ -101,6 +118,7 @@
     room?.id;
     membersOpen = false;
     draft = "";
+    lastTypingAt = 0;
     if (room) inputEl?.focus();
   });
 
@@ -136,13 +154,27 @@
   async function submit() {
     const text = draft.trim();
     if (!text || !canSend) return;
-    if (await onsend(text)) draft = "";
+    if (await onsend(text)) {
+      draft = "";
+      lastTypingAt = 0; // the next keystroke after a send signals at once
+    }
     inputEl?.focus();
   }
 
   function handleSubmit(event: Event) {
     event.preventDefault();
     void submit();
+  }
+
+  function handleInput(event: Event) {
+    if (sendError) oneditdraft();
+    // Read the field, not `draft`: this must not depend on bind:value running first.
+    const text = (event.currentTarget as HTMLTextAreaElement).value;
+    const now = Date.now();
+    if (text.trim() && now - lastTypingAt >= TYPING_THROTTLE_MS) {
+      lastTypingAt = now;
+      ontyping();
+    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -299,6 +331,8 @@
         </p>
       {:else if !peerOnline}
         <p class="send-note">{room.title} is offline.</p>
+      {:else if typingLabel}
+        <p class="send-note" role="status">{typingLabel}</p>
       {/if}
       <div class="box" class:disabled={!canSend}>
         <textarea
@@ -309,7 +343,7 @@
           placeholder="Type a message…"
           disabled={!canSend}
           autocomplete="off"
-          oninput={() => sendError && oneditdraft()}
+          oninput={handleInput}
           onkeydown={handleKeydown}></textarea>
         <button
           type="submit"

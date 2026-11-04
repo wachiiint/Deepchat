@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ConnectResult, Group, Message } from "./types";
+import type { ConnectResult, Group, Message, TypingEvent } from "./types";
 
 export async function connect(
   host: string,
@@ -32,6 +32,10 @@ export async function openPrivate(peer: string): Promise<string> {
 
 export async function sendMessage(roomId: string, text: string): Promise<void> {
   return invoke("send_message", { roomId, text });
+}
+
+export async function sendTyping(roomId: string): Promise<void> {
+  return invoke("send_typing", { roomId });
 }
 
 export async function getMessages(roomId: string): Promise<Message[]> {
@@ -84,4 +88,10 @@ export function onGroupDeleted(
   handler: (groupId: string) => void,
 ): Promise<UnlistenFn> {
   return listen<string>("group-deleted", (event) => handler(event.payload));
+}
+
+export function onTyping(
+  handler: (typing: TypingEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<TypingEvent>("typing", (event) => handler(event.payload));
 }

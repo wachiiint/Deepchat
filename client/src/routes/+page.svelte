@@ -5,6 +5,7 @@
   import type { ActiveRoom, Group, Message, RoomEvent } from "$lib/types";
   import { avatarFill, initial } from "$lib/avatar";
   import { toasts } from "$lib/toasts.svelte";
+  import { typing } from "$lib/typing.svelte";
   import ConnectView, {
     type ConnectPayload,
   } from "$lib/components/ConnectView.svelte";
@@ -101,6 +102,7 @@
     groupUnread = {};
     peerUnread = {};
     roomEvents = {};
+    typing.clearAll();
     createOpen = false;
     createError = "";
     toasts.clearAll();
@@ -116,6 +118,7 @@
       closeRoom();
     delete groupUnread[id];
     delete roomEvents[id];
+    typing.clearRoom(id);
     if (deleteTarget?.id === id) deleteTarget = null;
   }
 
@@ -201,6 +204,7 @@
         chatApi.onUsersUpdated((next) => {
           usersRevision++;
           users = next;
+          typing.prune(next);
         }),
         chatApi.onGroupsUpdated((next) => {
           updateGroups(next);
@@ -231,6 +235,8 @@
           disconnectNotice = message;
         }),
         chatApi.onMessageReceived((message) => {
+          // A sent message ends that person's "typing" at once.
+          typing.clear(message.roomId, message.sender);
           if (activeRoom && message.roomId === activeRoom.id) {
             if (!messages.some((m) => m.id === message.id)) {
               messages = [...messages, message];
@@ -244,6 +250,9 @@
                 (groupUnread[message.roomId] ?? 0) + 1;
             }
           }
+        }),
+        chatApi.onTyping(({ roomId, from }) => {
+          if (from !== currentUser) typing.note(roomId, from);
         }),
       ]);
       if (cancelled) {
@@ -384,6 +393,12 @@
     }
   }
 
+  // Best effort: a failed signal is not worth a toast, and a dead connection already
+  // reports itself through the `disconnected` event.
+  function handleTyping() {
+    if (activeRoom) chatApi.sendTyping(activeRoom.id).catch(() => {});
+  }
+
   async function handleLeaveGroup(groupId: string) {
     clearPending();
     try {
@@ -496,11 +511,13 @@
           group={activeGroup}
           {messages}
           events={activeRoom ? (roomEvents[activeRoom.id] ?? []) : []}
+          typers={activeRoom ? typing.in(activeRoom.id) : []}
           {currentUser}
           {busy}
           {peerOnline}
           {sendError}
           onsend={handleSend}
+          ontyping={handleTyping}
           onleave={handleLeaveGroup}
           ondelete={(group) => (deleteTarget = group)}
           oneditdraft={() => (sendError = "")}
