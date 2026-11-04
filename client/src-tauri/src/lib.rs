@@ -39,6 +39,9 @@ async fn connect(
         connection::Update::Groups(groups) => {
             let _ = app.emit("groups-updated", groups);
         }
+        connection::Update::GroupDeleted(group_id) => {
+            let _ = app.emit("group-deleted", group_id);
+        }
         connection::Update::Message(message) => {
             let _ = app.emit("message-received", message);
         }
@@ -94,6 +97,15 @@ async fn leave_group(group_id: String, state: State<'_, ChatState>) -> Result<()
 }
 
 #[tauri::command]
+async fn delete_group(group_id: String, state: State<'_, ChatState>) -> Result<(), String> {
+    connection(&state)?
+        .send(ClientMsg::DeleteGroup {
+            group: connection::group_name(&group_id)?,
+        })
+        .await
+}
+
+#[tauri::command]
 fn open_private(peer: String, state: State<'_, ChatState>) -> Result<String, String> {
     connection(&state)?.open_private(&peer)
 }
@@ -140,6 +152,7 @@ pub fn run() {
             create_group,
             join_group,
             leave_group,
+            delete_group,
             open_private,
             send_message,
             get_messages

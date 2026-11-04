@@ -22,6 +22,7 @@ const LIMIT: Duration = Duration::from_secs(10);
 pub enum Update {
     Users(Vec<String>),
     Groups(Vec<Group>),
+    GroupDeleted(String),
     Message(Message),
     Error(String),
     Disconnected(String),
@@ -107,7 +108,8 @@ fn error_text(kind: ErrorKind) -> &'static str {
         ErrorKind::UnknownUser => "That user is no longer connected.",
         ErrorKind::GroupExists => "A group with that name already exists. Choose another name.",
         ErrorKind::UnknownGroup => "That group no longer exists. Choose another group.",
-        ErrorKind::NotMember => "Join this group before sending messages.",
+        ErrorKind::NotMember => "You are not a member of this group.",
+        ErrorKind::NotCreator => "Only the group's creator can delete it.",
     }
 }
 
@@ -144,6 +146,11 @@ impl Model {
             }
             ServerMsg::GroupMsg { group, from, text } => {
                 self.receive(format!("group:{group}"), from, text, notify);
+            }
+            ServerMsg::GroupDeleted { group } => {
+                let room = format!("group:{group}");
+                self.messages.remove(&room);
+                notify(Update::GroupDeleted(room));
             }
             ServerMsg::Error { kind } => {
                 notify(Update::Error(error_text(kind).into()));
@@ -644,5 +651,31 @@ mod tests {
         assert_eq!(private_id("a", "b"), private_id("b", "a"));
         assert_ne!(private_id("a::b", "c"), private_id("a", "b::c"));
         assert_ne!(private_id("a", "b"), "group:dm:1:ab");
+    }
+
+    #[test]
+    fn group_deleted_drops_history_and_notifies_with_room_id() {
+        let mut model = Model {
+            snapshot: Snapshot {
+                name: "me".into(),
+                users: vec![],
+                groups: vec![],
+            },
+            messages: HashMap::new(),
+            peers: HashMap::new(),
+            next_id: 0,
+        };
+        let deleted = Arc::new(Mutex::new(Vec::new()));
+        let log = deleted.clone();
+        let notify: Notify = Arc::new(move |update| {
+            if let Update::GroupDeleted(room) = update {
+                log.lock().unwrap().push(room);
+            }
+        });
+        model.receive("group:g1".into(), "peer".into(), "hi".into(), &notify);
+        assert!(model.messages.contains_key("group:g1"));
+        model.apply(ServerMsg::GroupDeleted { group: "g1".into() }, &notify);
+        assert!(!model.messages.contains_key("group:g1"));
+        assert_eq!(*deleted.lock().unwrap(), ["group:g1"]);
     }
 }

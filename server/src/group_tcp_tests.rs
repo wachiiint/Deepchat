@@ -157,6 +157,23 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
         }]
     );
 
+    // only the creator may delete; A first skips the list push for C's re-creation
+    next_groups(&mut a).await;
+    send(&mut a, ClientMsg::DeleteGroup { group: "g1".into() }).await;
+    assert_eq!(
+        receive(&mut a).await,
+        ServerMsg::Error {
+            kind: ErrorKind::NotCreator
+        }
+    );
+    send(&mut c, ClientMsg::DeleteGroup { group: "g1".into() }).await;
+    assert_eq!(
+        receive(&mut c).await,
+        ServerMsg::GroupDeleted { group: "g1".into() }
+    );
+    assert!(next_groups(&mut c).await.is_empty());
+    assert!(next_groups(&mut a).await.is_empty());
+
     drop(a);
     drop(c);
     accept_task.abort();

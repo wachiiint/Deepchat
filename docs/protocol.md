@@ -19,26 +19,40 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 
 | # | Variant | Fields |
 |---|---------|--------|
-| 0 | `Register` | `name` |
-| 1 | `Dm` | `to`, `text` |
-| 2 | `CreateGroup` | `group` |
-| 3 | `ListGroups` | — |
-| 4 | `JoinGroup` | `group` |
-| 5 | `GroupMsg` | `group`, `text` |
-| 6 | `Pong` | — |
+| 0 | `Pong` | — |
+| 1 | `Register` | `name` |
+| 2 | `Dm` | `to`, `text` |
+| 3 | `CreateGroup` | `group` |
+| 4 | `ListGroups` | — |
+| 5 | `JoinGroup` | `group` |
+| 6 | `GroupMsg` | `group`, `text` |
 | 7 | `LeaveGroup` | `group` |
+| 8 | `DeleteGroup` | `group` |
 
 ## Server → Client (`ServerMsg`)
 
 | # | Variant | Fields |
 |---|---------|--------|
-| 0 | `Welcome` | `name` |
-| 1 | `Users` | `names` (includes the receiver) |
-| 2 | `Dm` | `from`, `to`, `text` |
-| 3 | `Groups` | list of (`group`, `creator`, `members`) |
-| 4 | `GroupMsg` | `group`, `from`, `text` |
-| 5 | `Ping` | — |
-| 6 | `Error` | `kind` (e.g. name taken, not a member) |
+| 0 | `Ping` | — |
+| 1 | `Welcome` | `name` |
+| 2 | `Users` | `names` (includes the receiver) |
+| 3 | `Dm` | `from`, `to`, `text` |
+| 4 | `Groups` | list of (`group`, `creator`, `members`) |
+| 5 | `GroupMsg` | `group`, `from`, `text` |
+| 6 | `Error` | `kind` (see below) |
+| 7 | `GroupDeleted` | `group` |
+
+### `ErrorKind` (in `ServerMsg::Error`)
+
+| Kind | Sent when |
+|------|-----------|
+| `NameTaken` | `Register` with a name that is already connected |
+| `NotRegistered` | Any message other than `Register` before registering |
+| `UnknownUser` | `Dm` to a user who is not connected |
+| `GroupExists` | `CreateGroup` with a name that is already in use |
+| `UnknownGroup` | `JoinGroup`, `LeaveGroup`, `DeleteGroup` or `GroupMsg` for a group that does not exist |
+| `NotMember` | `LeaveGroup` or `GroupMsg` by someone who is not in the group |
+| `NotCreator` | `DeleteGroup` by someone who did not create the group |
 
 ## Behavior
 
@@ -50,4 +64,6 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 | Group list | Pushed to every registered client after every group change; `ListGroups` replies only to its requester |
 | Group membership | Creator starts as the only member; others join with `JoinGroup`. `LeaveGroup` or disconnect removes membership (never restored on reconnect). A group with no members is deleted and its name can be reused. `creator` never changes, even if the creator leaves |
 | Repeated `JoinGroup` | No-op: no reply and no `Groups` push |
+| Group delete | Only the creator may send `DeleteGroup`, even after leaving the group. Members at that moment, plus the creator, get `GroupDeleted`, then everyone gets the
+new `Groups` |
 | Liveness | Server sends `Ping` periodically; client replies `Pong`. Server closes a connection that goes silent. Timings: `server-architecture.md` |

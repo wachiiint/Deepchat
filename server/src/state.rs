@@ -97,6 +97,18 @@ impl State {
         Ok(())
     }
 
+    /// Creator-only. Removes the group for everyone, even if the creator already left it.
+    /// Returns who to notify: the members at the time of deletion, plus the creator.
+    pub fn delete_group(&mut self, group: &str, name: &str) -> Result<BTreeSet<String>, ErrorKind> {
+        let info = self.groups.get(group).ok_or(ErrorKind::UnknownGroup)?;
+        if info.creator != name {
+            return Err(ErrorKind::NotCreator);
+        }
+        let mut info = self.groups.remove(group).ok_or(ErrorKind::UnknownGroup)?;
+        info.members.insert(info.creator);
+        Ok(info.members)
+    }
+
     /// Members of `group`, but only if `name` is one of them.
     pub fn members_for(&self, group: &str, name: &str) -> Result<&BTreeSet<String>, ErrorKind> {
         let group = self.groups.get(group).ok_or(ErrorKind::UnknownGroup)?;

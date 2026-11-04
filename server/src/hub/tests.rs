@@ -243,6 +243,16 @@ fn leave(group: &str) -> ClientMsg {
         group: group.into(),
     }
 }
+fn delete(group: &str) -> ClientMsg {
+    ClientMsg::DeleteGroup {
+        group: group.into(),
+    }
+}
+fn group_deleted(group: &str) -> ServerMsg {
+    ServerMsg::GroupDeleted {
+        group: group.into(),
+    }
+}
 fn say(group: &str, text: &str) -> ClientMsg {
     ClientMsg::GroupMsg {
         group: group.into(),
@@ -340,6 +350,7 @@ fn unknown_groups_and_unregistered_commands_are_rejected() {
     for msg in [
         join_group("missing"),
         leave("missing"),
+        delete("missing"),
         say("missing", "hi"),
     ] {
         h.send(&a, msg);
@@ -350,6 +361,7 @@ fn unknown_groups_and_unregistered_commands_are_rejected() {
         create("g1"),
         join_group("g1"),
         leave("g1"),
+        delete("g1"),
         ClientMsg::ListGroups,
     ] {
         h.send(&idle, msg);
@@ -408,4 +420,50 @@ fn leaving_updates_everyone_closes_membership_and_deletes_last_member_group() {
     }
     h.send(&c, create("g1"));
     assert_eq!(c.drain(), [groups(&[("g1", "c", &["c"])])]);
+}
+
+#[test]
+fn only_the_creator_can_delete_and_everyone_is_told() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    a.drain();
+    b.drain();
+    c.drain();
+
+    h.send(&b, delete("g1"));
+    assert_eq!(b.drain(), [error(ErrorKind::NotCreator)]);
+    h.send(&c, delete("g1"));
+    assert_eq!(c.drain(), [error(ErrorKind::NotCreator)]);
+    a.assert_silent();
+
+    h.send(&a, delete("g1"));
+    // members hear GroupDeleted before the new list; a non-member only gets the list
+    for client in [&mut a, &mut b] {
+        assert_eq!(client.drain(), [group_deleted("g1"), groups(&[])]);
+    }
+    assert_eq!(c.drain(), [groups(&[])]);
+
+    h.send(&b, say("g1", "hi"));
+    assert_eq!(b.drain(), [error(ErrorKind::UnknownGroup)]);
+    h.send(&b, create("g1"));
+    for client in [&mut a, &mut b, &mut c] {
+        assert_eq!(client.drain(), [groups(&[("g1", "b", &["b"])])]);
+    }
+}
+
+#[test]
+fn creator_can_delete_after_leaving() {
+    let mut h = Harness::default();
+    let [mut a, mut b] = h.join(["a", "b"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    h.send(&a, leave("g1"));
+    a.drain();
+    b.drain();
+    h.send(&a, delete("g1"));
+    // B was a member and A is the creator; both are told
+    assert_eq!(a.drain(), [group_deleted("g1"), groups(&[])]);
+    assert_eq!(b.drain(), [group_deleted("g1"), groups(&[])]);
 }
