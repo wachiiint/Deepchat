@@ -31,6 +31,7 @@ TCP bytes → Framer → postcard (ClientMsg / ServerMsg) → Session → Hub �
 | F5 | R7 | DM fan-out (sender + receiver) |
 | F6–F9 | R8–R11 | Group create, list, join, member-only messages |
 | F10 | Part 3 | AI reply into a group |
+| F12 | Part 3 | Typing relay to the other participants |
 
 F4 (chat UI) is client-side. Server delivers room-scoped messages only.
 
@@ -53,7 +54,7 @@ Hub logic is tested in-process, without sockets: `hub/tests.rs` drives `hub::app
 
 ```text
 protocol/src/       # shared crate (server + client)
-  messages.rs       # ClientMsg, ServerMsg, GroupInfo, ErrorKind
+  messages.rs       # ClientMsg, ServerMsg, GroupInfo, RoomRef, ErrorKind
   framer.rs         # length-prefixed frames + postcard encode/decode
 server/src/
   main.rs           # bind, accept, spawn

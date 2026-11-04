@@ -13,6 +13,7 @@ pub enum ClientMsg {
     GroupMsg { group: String, text: String },
     LeaveGroup { group: String },
     DeleteGroup { group: String },
+    Typing { room: RoomRef },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +44,10 @@ pub enum ServerMsg {
     GroupDeleted {
         group: String,
     },
+    Typing {
+        room: RoomRef,
+        from: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,6 +55,12 @@ pub struct GroupInfo {
     pub group: String,
     pub creator: String,
     pub members: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RoomRef {
+    Dm { to: String },
+    Group { group: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

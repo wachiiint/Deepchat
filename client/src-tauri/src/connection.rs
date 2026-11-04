@@ -155,7 +155,7 @@ impl Model {
             ServerMsg::Error { kind } => {
                 notify(Update::Error(error_text(kind).into()));
             }
-            ServerMsg::Welcome { .. } | ServerMsg::Ping => {}
+            ServerMsg::Welcome { .. } | ServerMsg::Typing { .. } | ServerMsg::Ping => {}
         }
     }
 

@@ -1,6 +1,9 @@
 //! Hub behavior tests, driven through `testkit::Harness`.
 
-use super::testkit::{Harness, dm, error, got_dm, users, welcome};
+use super::testkit::{
+    Harness, dm, error, got_dm, got_typing_dm, got_typing_group, typing_dm, typing_group, users,
+    welcome,
+};
 use super::*;
 
 // --- register and user list ---
@@ -466,4 +469,92 @@ fn creator_can_delete_after_leaving() {
     // B was a member and A is the creator; both are told
     assert_eq!(a.drain(), [group_deleted("g1"), groups(&[])]);
     assert_eq!(b.drain(), [group_deleted("g1"), groups(&[])]);
+}
+
+// --- Typing ---
+
+#[test]
+fn group_typing_reaches_other_members_only() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c, mut d] = h.join(["a", "b", "c", "d"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    h.send(&c, join_group("g1"));
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.drain();
+    }
+    h.send(&a, typing_group("g1"));
+    let expected = got_typing_group("g1", "a");
+    assert_eq!(b.drain(), std::slice::from_ref(&expected));
+    assert_eq!(c.drain(), std::slice::from_ref(&expected));
+    a.assert_silent(); // never your own indicator
+    d.assert_silent(); // non-member
+}
+
+#[test]
+fn group_typing_from_non_member_reaches_nobody_and_is_not_an_error() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    for client in [&mut a, &mut b, &mut c] {
+        client.drain();
+    }
+    h.send(&c, typing_group("g1"));
+    a.assert_silent();
+    b.assert_silent();
+    c.assert_silent();
+}
+
+#[test]
+fn typing_after_leaving_a_group_is_dropped() {
+    let mut h = Harness::default();
+    let [mut a, mut b] = h.join(["a", "b"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    h.send(&b, leave("g1"));
+    a.drain();
+    b.drain();
+    h.send(&b, typing_group("g1"));
+    h.send(&a, typing_group("g1"));
+    a.assert_silent();
+    b.assert_silent();
+}
+
+#[test]
+fn typing_in_unknown_group_is_silent() {
+    let mut h = Harness::default();
+    let [mut a] = h.join(["a"]);
+    h.send(&a, typing_group("nope"));
+    a.assert_silent();
+}
+
+#[test]
+fn dm_typing_reaches_only_the_target_and_names_the_sender() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, typing_dm("b"));
+    assert_eq!(b.drain(), [got_typing_dm("a")]);
+    a.assert_silent();
+    c.assert_silent();
+}
+
+#[test]
+fn dm_typing_to_offline_user_or_self_is_silent() {
+    let mut h = Harness::default();
+    let [mut a, b] = h.join(["a", "b"]);
+    h.disconnect(&b);
+    a.drain();
+    h.send(&a, typing_dm("b"));
+    h.send(&a, typing_dm("zed"));
+    h.send(&a, typing_dm("a"));
+    a.assert_silent();
+}
+
+#[test]
+fn typing_before_register_is_rejected() {
+    let mut h = Harness::default();
+    let mut idle = h.connect();
+    h.send(&idle, typing_dm("b"));
+    assert_eq!(idle.drain(), [error(ErrorKind::NotRegistered)]);
 }
