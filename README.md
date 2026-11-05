@@ -56,6 +56,14 @@ pnpm install
 pnpm tauri dev
 ```
 
+## AI model: local ollama
+```bash
+curl -fsSL https://ollama.com/install.sh | sh   # install Ollama for linux if not installed
+ollama pull llama3.2:1b                         # download the model (~1.3 GB)
+
+cargo test -p server ai -- --ignored --nocapture   # asks Ollama once, prints a pirate reply
+```
+
 ## Repo layout
 
 ```

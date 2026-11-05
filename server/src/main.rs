@@ -1,3 +1,5 @@
+#[allow(dead_code)] // used by group bots (#19)
+mod ai;
 mod hub;
 mod session;
 mod state;
