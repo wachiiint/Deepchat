@@ -279,7 +279,8 @@
                         <button
                           type="button"
                           class="ghost danger"
-                          onclick={() => removeBot(group.id, bot)}>Remove</button
+                          onclick={() => removeBot(group.id, bot)}
+                          >Remove</button
                         >
                       {/if}
                     </li>
@@ -291,8 +292,7 @@
                     <textarea
                       placeholder="Personality, e.g. You are a pirate. Talk like one."
                       maxlength="500"
-                      bind:value={botPersonality}
-                    ></textarea>
+                      bind:value={botPersonality}></textarea>
                     <button type="submit" class="ghost">Add bot</button>
                   </form>
                 {/if}
