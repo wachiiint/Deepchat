@@ -49,6 +49,7 @@ cargo run
 ```
 
 ### Client (Tauri GUI)
+spawn client in a window
 
 ```bash
 cd client
