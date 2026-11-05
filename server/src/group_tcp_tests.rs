@@ -55,7 +55,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (hub_tx, hub_rx) = mpsc::channel(32);
-    let hub_task = tokio::spawn(hub::run(hub_rx));
+    let hub_task = tokio::spawn(hub::run(hub_tx.downgrade(), hub_rx));
     let accept_task = tokio::spawn(async move {
         let mut id = 0;
         while let Ok((socket, peer)) = listener.accept().await {
@@ -85,6 +85,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
         group: "g1".into(),
         creator: "A".into(),
         members: vec!["A".into()],
+        bots: vec![],
     }];
     for socket in [&mut a, &mut b, &mut c] {
         assert_eq!(next_groups(socket).await, created);
@@ -93,6 +94,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     send(&mut b, ClientMsg::JoinGroup { group: "g1".into() }).await;
     let joined = vec![GroupInfo {
         members: vec!["A".into(), "B".into()],
+        bots: vec![],
         ..created[0].clone()
     }];
     for socket in [&mut a, &mut b, &mut c] {
@@ -136,6 +138,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     send(&mut a, ClientMsg::LeaveGroup { group: "g1".into() }).await;
     let remaining = vec![GroupInfo {
         members: vec!["B".into()],
+        bots: vec![],
         ..created[0].clone()
     }];
     for socket in [&mut a, &mut b, &mut c] {
@@ -153,7 +156,8 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
         vec![GroupInfo {
             group: "g1".into(),
             creator: "C".into(),
-            members: vec!["C".into()]
+            members: vec!["C".into()],
+            bots: vec![]
         }]
     );
 

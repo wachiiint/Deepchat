@@ -210,8 +210,9 @@ async fn run_applies_events_in_order() {
     ev_tx.send(Event::Connect { id: 0, tx }).await.unwrap();
     let msg = ClientMsg::Register { name: "a".into() };
     ev_tx.send(Event::Msg { id: 0, msg }).await.unwrap();
+    let weak = ev_tx.downgrade();
     drop(ev_tx); // closes the channel, so run() returns
-    run(ev_rx).await;
+    run(weak, ev_rx).await;
     assert_eq!(rx.recv().await, Some(welcome("a")));
     assert_eq!(rx.recv().await, Some(users(&["a"])));
 }
@@ -226,6 +227,7 @@ fn groups(entries: &[(&str, &str, &[&str])]) -> ServerMsg {
                 group: (*name).into(),
                 creator: (*creator).into(),
                 members: members.iter().map(|s| s.to_string()).collect(),
+                bots: vec![],
             })
             .collect(),
     }
@@ -557,4 +559,72 @@ fn typing_before_register_is_rejected() {
     let mut idle = h.connect();
     h.send(&idle, typing_dm("b"));
     assert_eq!(idle.drain(), [error(ErrorKind::NotRegistered)]);
+}
+
+// --- Bots (F10) ---
+
+#[test]
+fn created_bot_appears_in_group_list() {
+    let mut h = Harness::default();
+    let [a, mut b] = h.join(["a", "b"]);
+    h.send(&a, create("g1"));
+    let bot = ClientMsg::CreateBot {
+        group: "g1".into(),
+        name: "Pirate".into(),
+        personality: "You talk like a pirate.".into(),
+    };
+    h.send(&a, bot);
+    let Some(ServerMsg::Groups { groups }) = b.drain().pop() else {
+        panic!("expected a Groups broadcast");
+    };
+    assert_eq!(groups[0].bots, ["Pirate"]);
+}
+
+/// "a" creates g1 with bot Pirate; "b" joins; "c" stays outside.
+fn bot_group(h: &mut Harness) -> [super::testkit::Client; 3] {
+    let [a, b, c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    let bot = ClientMsg::CreateBot {
+        group: "g1".into(),
+        name: "Pirate".into(),
+        personality: "Talk like a pirate.".into(),
+    };
+    h.send(&a, bot);
+    [a, b, c]
+}
+
+#[test]
+fn only_a_mention_asks_the_bot() {
+    let mut h = Harness::default();
+    let [a, b, _c] = bot_group(&mut h);
+    h.send(&a, say("g1", "hello"));
+    assert!(h.ai_jobs().is_empty());
+    h.send(&b, say("g1", "@Pirate hi"));
+    let jobs = h.ai_jobs();
+    assert_eq!(jobs.len(), 1);
+    assert!(jobs[0].system.contains("Talk like a pirate."));
+    assert_eq!(jobs[0].prompt, "a: hello\nb: @Pirate hi");
+}
+
+#[test]
+fn bot_reply_reaches_members_only() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = bot_group(&mut h);
+    a.drain();
+    b.drain();
+    c.drain();
+    h.apply(Event::AiReply {
+        group: "g1".into(),
+        bot: "Pirate".into(),
+        text: "Arr!".into(),
+    });
+    let reply = ServerMsg::GroupMsg {
+        group: "g1".into(),
+        from: "Pirate".into(),
+        text: "Arr!".into(),
+    };
+    assert_eq!(a.drain(), vec![reply.clone()]);
+    assert_eq!(b.drain(), [reply]);
+    c.assert_silent();
 }

@@ -1,7 +1,7 @@
 //! In-memory server state. Owned by the hub task only, so no locks.
 
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use tokio::sync::mpsc;
 
@@ -15,9 +15,24 @@ struct Conn {
     name: Option<String>, // None until Register succeeds
 }
 
+pub const MAX_BOTS: usize = 3;
+pub const MAX_PERSONALITY: usize = 500; // characters
+const HISTORY: usize = 50; // group lines a bot sees
+
 struct Group {
     creator: String,
     members: BTreeSet<String>,
+    bots: BTreeMap<String, String>, // bot name -> personality
+    history: VecDeque<String>,      // "from: text", newest last
+}
+
+/// A bot reply to fetch from the LLM. The hub queues it; `hub::run` spawns the call.
+#[derive(Debug)]
+pub struct AiJob {
+    pub group: String,
+    pub bot: String,
+    pub system: String,
+    pub prompt: String,
 }
 
 #[derive(Default)]
@@ -25,6 +40,7 @@ pub struct State {
     conns: HashMap<ConnId, Conn>,
     names: HashMap<String, ConnId>,
     groups: HashMap<String, Group>,
+    pub ai_jobs: Vec<AiJob>,
 }
 
 impl State {
@@ -73,6 +89,8 @@ impl State {
                 e.insert(Group {
                     creator: creator.to_owned(),
                     members: BTreeSet::from([creator.to_owned()]),
+                    bots: BTreeMap::new(),
+                    history: VecDeque::new(),
                 });
                 Ok(())
             }
@@ -109,6 +127,71 @@ impl State {
         Ok(info.members)
     }
 
+    /// Creator-only. A bot name must be unique in its group and must not be a user's name.
+    pub fn create_bot(
+        &mut self,
+        group: &str,
+        by: &str,
+        name: String,
+        personality: String,
+    ) -> Result<(), ErrorKind> {
+        let info = self.groups.get_mut(group).ok_or(ErrorKind::UnknownGroup)?;
+        if info.creator != by {
+            return Err(ErrorKind::NotCreator);
+        }
+        if info.bots.contains_key(&name) || self.names.contains_key(&name) {
+            return Err(ErrorKind::BotNameTaken);
+        }
+        if info.bots.len() >= MAX_BOTS || personality.chars().count() > MAX_PERSONALITY {
+            return Err(ErrorKind::BotLimit);
+        }
+        info.bots.insert(name, personality);
+        Ok(())
+    }
+
+    /// Creator-only. `Ok(false)` if the group had no such bot.
+    pub fn remove_bot(&mut self, group: &str, by: &str, name: &str) -> Result<bool, ErrorKind> {
+        let info = self.groups.get_mut(group).ok_or(ErrorKind::UnknownGroup)?;
+        if info.creator != by {
+            return Err(ErrorKind::NotCreator);
+        }
+        Ok(info.bots.remove(name).is_some())
+    }
+
+    /// Remembers a group line so bots get context. Keeps only the last `HISTORY`.
+    pub fn record(&mut self, group: &str, from: &str, text: &str) {
+        if let Some(info) = self.groups.get_mut(group) {
+            info.history.push_back(format!("{from}: {text}"));
+            if info.history.len() > HISTORY {
+                info.history.pop_front();
+            }
+        }
+    }
+
+    /// If `text` starts with `@<bot>` of this group, queue an AI job for that bot.
+    pub fn ask_bot(&mut self, group: &str, text: &str) {
+        let Some(info) = self.groups.get(group) else {
+            return;
+        };
+        let mention = text
+            .strip_prefix('@')
+            .and_then(|t| t.split_whitespace().next());
+        let Some((bot, personality)) = mention.and_then(|m| info.bots.get_key_value(m)) else {
+            return;
+        };
+        self.ai_jobs.push(AiJob {
+            group: group.to_owned(),
+            bot: bot.clone(),
+            system: format!("You are {bot}, a bot in a group chat. {personality}"),
+            prompt: Vec::from(info.history.clone()).join("\n"),
+        });
+    }
+
+    /// Members of `group`, with no membership check (for bot replies).
+    pub fn members(&self, group: &str) -> Option<&BTreeSet<String>> {
+        self.groups.get(group).map(|g| &g.members)
+    }
+
     /// Members of `group`, but only if `name` is one of them.
     pub fn members_for(&self, group: &str, name: &str) -> Result<&BTreeSet<String>, ErrorKind> {
         let group = self.groups.get(group).ok_or(ErrorKind::UnknownGroup)?;
@@ -127,6 +210,7 @@ impl State {
                 group: name.clone(),
                 creator: group.creator.clone(),
                 members: group.members.iter().cloned().collect(),
+                bots: group.bots.keys().cloned().collect(),
             })
             .collect();
         groups.sort_by(|a, b| a.group.cmp(&b.group));
@@ -156,5 +240,78 @@ impl State {
         for &id in self.names.values() {
             self.send(id, msg.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod bot_tests {
+    use super::*;
+
+    /// Group "g" created by "a".
+    fn state() -> State {
+        let mut s = State::default();
+        s.create_group("g".into(), "a").unwrap();
+        s
+    }
+
+    fn add(s: &mut State, by: &str, name: &str) -> Result<(), ErrorKind> {
+        s.create_bot("g", by, name.into(), "You talk like a pirate.".into())
+    }
+
+    #[test]
+    fn creator_adds_and_removes_bot() {
+        let mut s = state();
+        assert_eq!(add(&mut s, "a", "Pirate"), Ok(()));
+        assert_eq!(s.remove_bot("g", "a", "Pirate"), Ok(true));
+        assert_eq!(s.remove_bot("g", "a", "Pirate"), Ok(false));
+    }
+
+    #[test]
+    fn non_creator_rejected() {
+        let mut s = state();
+        s.join_group("g", "b".into()).unwrap();
+        assert_eq!(add(&mut s, "b", "Pirate"), Err(ErrorKind::NotCreator));
+        add(&mut s, "a", "Pirate").unwrap();
+        assert_eq!(s.remove_bot("g", "b", "Pirate"), Err(ErrorKind::NotCreator));
+    }
+
+    #[test]
+    fn at_most_three_bots() {
+        let mut s = state();
+        for name in ["B1", "B2", "B3"] {
+            add(&mut s, "a", name).unwrap();
+        }
+        assert_eq!(add(&mut s, "a", "B4"), Err(ErrorKind::BotLimit));
+    }
+
+    #[test]
+    fn personality_length_limit() {
+        let mut s = state();
+        let ok = "x".repeat(MAX_PERSONALITY);
+        let long = "x".repeat(MAX_PERSONALITY + 1);
+        assert_eq!(s.create_bot("g", "a", "Ok".into(), ok), Ok(()));
+        assert_eq!(
+            s.create_bot("g", "a", "Long".into(), long),
+            Err(ErrorKind::BotLimit)
+        );
+    }
+
+    #[test]
+    fn bot_name_clashes_rejected() {
+        let mut s = state();
+        s.connect(1, mpsc::unbounded_channel().0);
+        s.register(1, "bob".into()).unwrap();
+        add(&mut s, "a", "Pirate").unwrap();
+        assert_eq!(add(&mut s, "a", "Pirate"), Err(ErrorKind::BotNameTaken));
+        assert_eq!(add(&mut s, "a", "bob"), Err(ErrorKind::BotNameTaken));
+    }
+
+    #[test]
+    fn bots_vanish_with_group() {
+        let mut s = state();
+        add(&mut s, "a", "Pirate").unwrap();
+        s.delete_group("g", "a").unwrap();
+        s.create_group("g".into(), "a").unwrap();
+        assert_eq!(add(&mut s, "a", "Pirate"), Ok(())); // no clash: old bot is gone
     }
 }

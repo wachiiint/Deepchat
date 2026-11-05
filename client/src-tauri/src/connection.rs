@@ -118,7 +118,13 @@ fn error_text(kind: ErrorKind) -> &'static str {
         ErrorKind::GroupExists => "A group with that name already exists. Choose another name.",
         ErrorKind::UnknownGroup => "That group no longer exists. Choose another group.",
         ErrorKind::NotMember => "You are not a member of this group.",
-        ErrorKind::NotCreator => "Only the group's creator can delete it.",
+        ErrorKind::NotCreator => "Only the group's creator can do that.",
+        ErrorKind::BotLimit => {
+            "Bot limit reached: at most 3 bots, personality at most 500 characters."
+        }
+        ErrorKind::BotNameTaken => {
+            "That name is already used by a bot or a user. Choose another name."
+        }
     }
 }
 
@@ -442,6 +448,7 @@ mod tests {
             group: "g1".into(),
             creator: "me".into(),
             members: vec!["me".into()],
+            bots: vec![],
         };
         let server = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
@@ -736,6 +743,7 @@ mod tests {
             group: group.into(),
             creator: members[0].into(),
             members: members.iter().map(|m| m.to_string()).collect(),
+            bots: vec![],
         }
     }
 

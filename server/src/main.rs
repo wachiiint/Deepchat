@@ -1,4 +1,3 @@
-#[allow(dead_code)] // used by group bots (#19)
 mod ai;
 mod hub;
 mod session;
@@ -22,7 +21,7 @@ async fn main() -> std::io::Result<()> {
 
     // bounded: if the hub falls behind, readers wait instead of piling up memory
     let (hub_tx, hub_rx) = mpsc::channel(1024);
-    tokio::spawn(hub::run(hub_rx));
+    tokio::spawn(hub::run(hub_tx.downgrade(), hub_rx));
 
     let mut next_id: ConnId = 0;
     loop {

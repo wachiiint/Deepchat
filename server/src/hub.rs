@@ -7,20 +7,52 @@ mod tests;
 
 use tokio::sync::mpsc;
 
-use crate::state::{ConnId, Outbox, State};
+use crate::ai;
+use crate::state::{AiJob, ConnId, Outbox, State};
 use protocol::{ClientMsg, ErrorKind, RoomRef, ServerMsg};
 
 pub enum Event {
-    Connect { id: ConnId, tx: Outbox },
-    Msg { id: ConnId, msg: ClientMsg },
-    Disconnect { id: ConnId },
+    Connect {
+        id: ConnId,
+        tx: Outbox,
+    },
+    Msg {
+        id: ConnId,
+        msg: ClientMsg,
+    },
+    Disconnect {
+        id: ConnId,
+    },
+    /// A bot's answer, sent back by the task that called the LLM.
+    AiReply {
+        group: String,
+        bot: String,
+        text: String,
+    },
 }
 
-pub async fn run(mut rx: mpsc::Receiver<Event>) {
+/// `tx` is weak so the hub's own handle does not keep the channel open forever.
+pub async fn run(tx: mpsc::WeakSender<Event>, mut rx: mpsc::Receiver<Event>) {
     let mut state = State::default();
     while let Some(ev) = rx.recv().await {
         apply(&mut state, ev);
+        for job in state.ai_jobs.drain(..) {
+            spawn_ai(job, tx.clone());
+        }
     }
+}
+
+// The LLM takes seconds, so it runs on its own task; the hub never waits for it.
+fn spawn_ai(job: AiJob, tx: mpsc::WeakSender<Event>) {
+    tokio::spawn(async move {
+        let text = ai::complete(&job.system, &job.prompt)
+            .await
+            .unwrap_or_else(|e| format!("(bot unavailable: {e})"));
+        if let Some(tx) = tx.upgrade() {
+            let (group, bot) = (job.group, job.bot);
+            let _ = tx.send(Event::AiReply { group, bot, text }).await;
+        }
+    });
 }
 
 /// One hub step. Synchronous so tests can drive it without a runtime (see `testkit`).
@@ -36,6 +68,7 @@ fn apply(state: &mut State, ev: Event) {
                 }
             }
         }
+        Event::AiReply { group, bot, text } => bot_reply(state, group, bot, text),
     }
 }
 
@@ -64,6 +97,20 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
         ClientMsg::DeleteGroup { group } => delete_group(state, id, &me, group),
         ClientMsg::GroupMsg { group, text } => group_msg(state, id, me, group, text),
         ClientMsg::Typing { room } => typing(state, id, me, room),
+        // bot names reach clients inside the Groups broadcast
+        ClientMsg::CreateBot {
+            group,
+            name,
+            personality,
+        } => match state.create_bot(&group, &me, name, personality) {
+            Ok(()) => broadcast_groups(state),
+            Err(kind) => reject(state, id, kind),
+        },
+        ClientMsg::RemoveBot { group, name } => match state.remove_bot(&group, &me, &name) {
+            Ok(true) => broadcast_groups(state),
+            Ok(false) => {} // no such bot
+            Err(kind) => reject(state, id, kind),
+        },
     }
 }
 
@@ -126,19 +173,38 @@ fn delete_group(state: &mut State, id: ConnId, me: &str, group: String) {
 }
 
 // members only; the sender's copy confirms delivery
-fn group_msg(state: &State, id: ConnId, me: String, group: String, text: String) {
+fn group_msg(state: &mut State, id: ConnId, me: String, group: String, text: String) {
     let members = match state.members_for(&group, &me) {
         Ok(members) => members,
         Err(kind) => return reject(state, id, kind),
     };
     let msg = ServerMsg::GroupMsg {
-        group,
-        from: me,
-        text,
+        group: group.clone(),
+        from: me.clone(),
+        text: text.clone(),
     };
     for member_id in members.iter().filter_map(|m| state.id_of(m)) {
         state.send(member_id, msg.clone());
     }
+    state.record(&group, &me, &text);
+    state.ask_bot(&group, &text);
+}
+
+// Same delivery as a member's message, so R11 (members only) holds for bots too.
+// Not passed to `ask_bot`, so bots never trigger each other.
+fn bot_reply(state: &mut State, group: String, bot: String, text: String) {
+    let Some(members) = state.members(&group) else {
+        return; // group deleted while the bot was thinking
+    };
+    let msg = ServerMsg::GroupMsg {
+        group: group.clone(),
+        from: bot.clone(),
+        text: text.clone(),
+    };
+    for member_id in members.iter().filter_map(|m| state.id_of(m)) {
+        state.send(member_id, msg.clone());
+    }
+    state.record(&group, &bot, &text);
 }
 
 // Transient signal: relayed to the other participants, never echoed, never stored.
