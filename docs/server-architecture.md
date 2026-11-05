@@ -41,8 +41,8 @@ F4 (chat UI) is client-side. Server delivers room-scoped messages only.
 |--------|----------|
 | Online users | In-memory registry |
 | Groups / members | In-memory hub maps |
-| Message history | Not in v1 |
-| AI | `AiClient` trait (stub → Ollama / OpenAI) |
+| Bots | Per group: name → personality, max 3 |
+| Message history | Last 50 group lines, in memory, only as bot context. Not stored on disk, not replayed to clients |
 
 No generic repository layer in v1. Add a narrow store trait later only if persistence is required.
 
@@ -63,8 +63,31 @@ server/src/
   hub/testkit.rs    # cfg(test) harness: fake clients, drains ServerMsgs
   hub/tests.rs      # cfg(test) hub behavior tests
   state.rs          # in-memory users + groups
-  ai.rs             # AiClient + implementations
+  ai.rs             # one LLM call: complete(system, prompt)
 ```
+
+## AI bots (F10)
+
+The LLM is slow (seconds), and the hub must never wait. So the hub only queues the job; a separate task makes the call and reports back as a new event.
+
+```text
+"@Pirate hi" → hub: deliver to members, save line, queue AiJob, send Typing from Pirate
+hub::run     → spawn task → HTTP → Ollama
+task         → Event::AiReply → hub → GroupMsg from Pirate → members only
+```
+
+| Item | Value |
+|------|-------|
+| LLM transport | HTTP to an OpenAI-compatible endpoint. Chat itself stays raw TCP |
+| Default backend | Local Ollama, `llama3.2:1b` |
+| Config | `DEEPCHAT_AI_URL` (default `http://localhost:11434/v1`), `DEEPCHAT_AI_MODEL` |
+| Timeout | 60 s, then the bot posts `(bot unavailable: timeout)` |
+| System prompt | `You are <bot>, a bot in a group chat. <personality>` |
+| User prompt | The last 50 lines, then the persona again and "Write only <bot>'s short reply to the last message". Small models otherwise just continue the log in another bot's voice |
+| Hub → task link | Weak sender, so the hub's own handle does not keep its channel open forever |
+| Tests | Check the queued `AiJob`; no LLM, no stub. One `#[ignore]` test calls real Ollama |
+
+**Library spike:** `aisdk` 0.5.2 works with local Ollama through its `openaicompatible` feature. It also needs the `openai` feature, because `openaicompatible` uses that code but does not turn it on.
 
 ## Liveness
 

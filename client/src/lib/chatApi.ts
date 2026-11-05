@@ -50,6 +50,18 @@ export async function deleteGroup(groupId: string): Promise<void> {
   return invoke("delete_group", { groupId });
 }
 
+export async function createBot(
+  groupId: string,
+  name: string,
+  personality: string,
+): Promise<void> {
+  return invoke("create_bot", { groupId, name, personality });
+}
+
+export async function removeBot(groupId: string, name: string): Promise<void> {
+  return invoke("remove_bot", { groupId, name });
+}
+
 export async function disconnect(): Promise<void> {
   return invoke("disconnect");
 }

@@ -3,6 +3,7 @@ export type Group = {
   name: string;
   creator: string;
   members: string[];
+  bots: string[];
 };
 
 export type Message = {
