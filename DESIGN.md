@@ -292,6 +292,9 @@ Left-aligned for everyone, including you. 32px initial avatar (hashed fill, whit
 ### Membership Notice
 A faint 12px line in the message feed, "mya joined the group" or "mya left the group" with a faint time, name at 600. It sits on the message text column (68px left, aligned with message bodies) with no avatar, tinted `faint` so it never competes with messages. Derived client-side from group snapshots, shown only for groups you belong to, kept in memory (lost on reconnect), and never counted as unread. A notice breaks message grouping, so the next message shows its header again.
 
+### Typing Indicator
+One mute 12px line directly above the composer: "mya is typing…", "mya and bo are typing…", or "Several people are typing…" for three or more. It shares the send-note slot, so a send error or the "is offline" note replaces it. Shown only in the room the signal belongs to, never for yourself. Each signal keeps a name visible for 4s; a message from that person ends it at once. Exposed as a polite status region.
+
 ### Room Header
 56px bar with `#` glyph (faint) + 16px/650 title, 13px mute meta ("3 members · Created by mya", or online/offline status with a dot for DMs), and ghost actions on the right. Members opens a 240px popover (raise, strong hairline, `lg`, float shadow) listing 36px rows with 24px avatars and faint 11px tags.
 
@@ -313,7 +316,6 @@ After a disconnect the connect screen shows an err-soft banner (`md`, 10px 12px,
 
 ### Specified, Not Yet Implemented
 These slots are part of the system but **are not built**; each needs protocol support first. Do not ship them as stubs.
-- **Typing indicator:** one line directly above the composer, "{name} is typing…", mute 12px; it shares the send-note slot's position.
 - **Read receipts:** "Seen by …" in faint 12px directly under your most recent message.
 - **AI bot member:** avatar filled with aqua (navy initial) plus a small outlined "AI" tag after the name, wherever members appear.
 

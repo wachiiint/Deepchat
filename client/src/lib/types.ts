@@ -13,6 +13,12 @@ export type Message = {
   timestamp: number;
 };
 
+// Someone typed in a room. The room id matches `Message.roomId`.
+export type TypingEvent = {
+  roomId: string;
+  from: string;
+};
+
 // A membership change seen while a group was open. Lives only in the frontend.
 export type RoomEvent = {
   id: string;

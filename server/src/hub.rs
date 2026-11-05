@@ -8,7 +8,7 @@ mod tests;
 use tokio::sync::mpsc;
 
 use crate::state::{ConnId, Outbox, State};
-use protocol::{ClientMsg, ErrorKind, ServerMsg};
+use protocol::{ClientMsg, ErrorKind, RoomRef, ServerMsg};
 
 pub enum Event {
     Connect { id: ConnId, tx: Outbox },
@@ -63,6 +63,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
         ClientMsg::LeaveGroup { group } => leave_group(state, id, &me, &group),
         ClientMsg::DeleteGroup { group } => delete_group(state, id, &me, group),
         ClientMsg::GroupMsg { group, text } => group_msg(state, id, me, group, text),
+        ClientMsg::Typing { room } => typing(state, id, me, room),
     }
 }
 
@@ -137,6 +138,36 @@ fn group_msg(state: &State, id: ConnId, me: String, group: String, text: String)
     };
     for member_id in members.iter().filter_map(|m| state.id_of(m)) {
         state.send(member_id, msg.clone());
+    }
+}
+
+// Transient signal: relayed to the other participants, never echoed, never stored.
+// Every failure is a silent drop so a typing burst cannot become error spam.
+fn typing(state: &State, id: ConnId, me: String, room: RoomRef) {
+    match room {
+        RoomRef::Dm { to } => {
+            let Some(to_id) = state.id_of(&to).filter(|&to_id| to_id != id) else {
+                return;
+            };
+            let room = RoomRef::Dm { to: me.clone() };
+            state.send(to_id, ServerMsg::Typing { room, from: me });
+        }
+        RoomRef::Group { group } => {
+            let Ok(members) = state.members_for(&group, &me) else {
+                return;
+            };
+            let msg = ServerMsg::Typing {
+                room: RoomRef::Group { group },
+                from: me.clone(),
+            };
+            for member_id in members
+                .iter()
+                .filter(|m| **m != me)
+                .filter_map(|m| state.id_of(m))
+            {
+                state.send(member_id, msg.clone());
+            }
+        }
     }
 }
 

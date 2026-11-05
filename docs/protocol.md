@@ -28,6 +28,7 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 | 6 | `GroupMsg` | `group`, `text` |
 | 7 | `LeaveGroup` | `group` |
 | 8 | `DeleteGroup` | `group` |
+| 9 | `Typing` | `room` ([`RoomRef`](#roomref)) |
 
 ## Server → Client (`ServerMsg`)
 
@@ -41,6 +42,16 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 | 5 | `GroupMsg` | `group`, `from`, `text` |
 | 6 | `Error` | `kind` (see below) |
 | 7 | `GroupDeleted` | `group` |
+| 8 | `Typing` | `room` ([`RoomRef`](#roomref)), `from` |
+
+### `RoomRef`
+
+Names a room without a derived id. Used by `Typing` in both directions.
+
+| Variant | Fields | Meaning |
+|---------|--------|---------|
+| `Dm` | `to` | The **other party** of a private room |
+| `Group` | `group` | A group room |
 
 ### `ErrorKind` (in `ServerMsg::Error`)
 
@@ -66,4 +77,5 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 | Repeated `JoinGroup` | No-op: no reply and no `Groups` push |
 | Group delete | Only the creator may send `DeleteGroup`, even after leaving the group. Members at that moment, plus the creator, get `GroupDeleted`, then everyone gets the
 new `Groups` |
+| Typing | `Typing` is a transient signal: relayed to the other participants, never echoed to the sender, never stored, no "stopped typing" message (the receiving client expires the indicator). DM: relayed to the target if connected. Group: relayed to every member except the sender, only if the sender is a member. Signals never produce `Error`: an offline target, unknown group, non-member sender and typing to yourself are dropped silently. The only error is `NotRegistered` before `Register`, as for every message |
 | Liveness | Server sends `Ping` periodically; client replies `Pong`. Server closes a connection that goes silent. Timings: `server-architecture.md` |

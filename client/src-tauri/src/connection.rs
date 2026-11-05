@@ -1,5 +1,5 @@
 //! TCP connection and a cache of server-confirmed data for the desktop UI.
-use protocol::{ClientMsg, ErrorKind, GroupInfo, ServerMsg, read_frame, write_frame};
+use protocol::{ClientMsg, ErrorKind, GroupInfo, RoomRef, ServerMsg, read_frame, write_frame};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -24,6 +24,7 @@ pub enum Update {
     Groups(Vec<Group>),
     GroupDeleted(String),
     Message(Message),
+    Typing(Typing),
     Error(String),
     Disconnected(String),
 }
@@ -58,6 +59,14 @@ pub struct Message {
     pub sender: String,
     pub text: String,
     pub timestamp: u64,
+}
+
+/// Someone started or kept typing in a room. The frontend owns expiry.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Typing {
+    pub room_id: String,
+    pub from: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -155,8 +164,33 @@ impl Model {
             ServerMsg::Error { kind } => {
                 notify(Update::Error(error_text(kind).into()));
             }
+            ServerMsg::Typing { room, from } => {
+                let room_id = match room {
+                    RoomRef::Dm { to } => private_id(&self.snapshot.name, &to),
+                    RoomRef::Group { group } => format!("group:{group}"),
+                };
+                notify(Update::Typing(Typing { room_id, from }));
+            }
             ServerMsg::Welcome { .. } | ServerMsg::Ping => {}
         }
+    }
+
+    /// `None` when the signal cannot be delivered: unknown room, or a group we are not in.
+    fn typing(&self, room: &str) -> Option<ClientMsg> {
+        if let Some(peer) = self.peers.get(room) {
+            return Some(ClientMsg::Typing {
+                room: RoomRef::Dm { to: peer.clone() },
+            });
+        }
+        self.snapshot
+            .groups
+            .iter()
+            .find(|g| g.id == room && g.members.contains(&self.snapshot.name))
+            .map(|g| ClientMsg::Typing {
+                room: RoomRef::Group {
+                    group: g.name.clone(),
+                },
+            })
     }
 
     fn receive(&mut self, room_id: String, sender: String, text: String, notify: &Notify) {
@@ -369,6 +403,11 @@ impl Connection {
             group: group.name.clone(),
             text,
         })
+    }
+
+    /// The signal to send while the user types in `room`; typing never surfaces an error.
+    pub fn typing(&self, room: &str) -> Result<Option<ClientMsg>, String> {
+        Ok(self.model.lock().map_err(|e| e.to_string())?.typing(room))
     }
 
     pub fn messages(&self, room: &str) -> Result<Vec<Message>, String> {
@@ -677,5 +716,86 @@ mod tests {
         model.apply(ServerMsg::GroupDeleted { group: "g1".into() }, &notify);
         assert!(!model.messages.contains_key("group:g1"));
         assert_eq!(*deleted.lock().unwrap(), ["group:g1"]);
+    }
+
+    fn model_for(name: &str, groups: Vec<GroupInfo>) -> Model {
+        Model {
+            snapshot: Snapshot {
+                name: name.into(),
+                users: vec![],
+                groups: groups.into_iter().map(Group::from).collect(),
+            },
+            messages: HashMap::new(),
+            peers: HashMap::new(),
+            next_id: 0,
+        }
+    }
+
+    fn group_info(group: &str, members: &[&str]) -> GroupInfo {
+        GroupInfo {
+            group: group.into(),
+            creator: members[0].into(),
+            members: members.iter().map(|m| m.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn incoming_typing_maps_to_the_same_room_ids_as_messages() {
+        let mut model = model_for("me", vec![]);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let notify: Notify = Arc::new(move |update| {
+            if let Update::Typing(t) = update {
+                log.lock().unwrap().push((t.room_id, t.from));
+            }
+        });
+        // for a DM the server names the sender in `to`
+        model.apply(
+            ServerMsg::Typing {
+                room: RoomRef::Dm { to: "bob".into() },
+                from: "bob".into(),
+            },
+            &notify,
+        );
+        model.apply(
+            ServerMsg::Typing {
+                room: RoomRef::Group { group: "g1".into() },
+                from: "bob".into(),
+            },
+            &notify,
+        );
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                (private_id("me", "bob"), "bob".to_string()),
+                ("group:g1".to_string(), "bob".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn outgoing_typing_targets_the_peer_or_group_and_is_none_when_undeliverable() {
+        let mut model = model_for(
+            "me",
+            vec![group_info("in", &["me"]), group_info("out", &["x"])],
+        );
+        let dm_room = private_id("me", "bob");
+        model.peers.insert(dm_room.clone(), "bob".into());
+
+        assert_eq!(
+            model.typing(&dm_room),
+            Some(ClientMsg::Typing {
+                room: RoomRef::Dm { to: "bob".into() }
+            })
+        );
+        assert_eq!(
+            model.typing("group:in"),
+            Some(ClientMsg::Typing {
+                room: RoomRef::Group { group: "in".into() }
+            })
+        );
+        assert_eq!(model.typing("group:out"), None, "not a member");
+        assert_eq!(model.typing("group:nope"), None, "unknown group");
+        assert_eq!(model.typing(&private_id("me", "zed")), None, "unopened DM");
     }
 }

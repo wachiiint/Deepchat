@@ -17,7 +17,7 @@
 
 use super::{Event, apply};
 use crate::state::{ConnId, State};
-use protocol::{ClientMsg, ErrorKind, ServerMsg};
+use protocol::{ClientMsg, ErrorKind, RoomRef, ServerMsg};
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 
 #[derive(Default)]
@@ -121,4 +121,35 @@ pub fn got_dm(from: &str, to: &str, text: &str) -> ServerMsg {
 
 pub fn error(kind: ErrorKind) -> ServerMsg {
     ServerMsg::Error { kind }
+}
+
+pub fn typing_dm(to: &str) -> ClientMsg {
+    ClientMsg::Typing {
+        room: RoomRef::Dm { to: to.into() },
+    }
+}
+
+pub fn typing_group(group: &str) -> ClientMsg {
+    ClientMsg::Typing {
+        room: RoomRef::Group {
+            group: group.into(),
+        },
+    }
+}
+
+/// What a DM recipient receives: `to` names the sender.
+pub fn got_typing_dm(from: &str) -> ServerMsg {
+    ServerMsg::Typing {
+        room: RoomRef::Dm { to: from.into() },
+        from: from.into(),
+    }
+}
+
+pub fn got_typing_group(group: &str, from: &str) -> ServerMsg {
+    ServerMsg::Typing {
+        room: RoomRef::Group {
+            group: group.into(),
+        },
+        from: from.into(),
+    }
 }
