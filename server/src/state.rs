@@ -168,23 +168,23 @@ impl State {
         }
     }
 
-    /// If `text` starts with `@<bot>` of this group, queue an AI job for that bot.
-    pub fn ask_bot(&mut self, group: &str, text: &str) {
-        let Some(info) = self.groups.get(group) else {
-            return;
-        };
-        let mention = text
-            .strip_prefix('@')
-            .and_then(|t| t.split_whitespace().next());
-        let Some((bot, personality)) = mention.and_then(|m| info.bots.get_key_value(m)) else {
-            return;
-        };
+    /// If `text` starts with `@<bot>` of this group, queue an AI job and return the bot.
+    pub fn ask_bot(&mut self, group: &str, text: &str) -> Option<String> {
+        let info = self.groups.get(group)?;
+        let mention = text.strip_prefix('@')?.split_whitespace().next()?;
+        let (bot, personality) = info.bots.get_key_value(mention)?;
         self.ai_jobs.push(AiJob {
             group: group.to_owned(),
             bot: bot.clone(),
             system: format!("You are {bot}, a bot in a group chat. {personality}"),
-            prompt: Vec::from(info.history.clone()).join("\n"),
+            // Persona repeated after the log: small models otherwise just continue the log.
+            prompt: format!(
+                "Group chat so far:\n{}\n\nYou are {bot}. {personality}\n\
+                 Write only {bot}'s short reply to the last message.",
+                Vec::from(info.history.clone()).join("\n")
+            ),
         });
+        Some(bot.clone())
     }
 
     /// Members of `group`, with no membership check (for bot replies).

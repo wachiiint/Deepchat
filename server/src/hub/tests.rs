@@ -604,7 +604,7 @@ fn only_a_mention_asks_the_bot() {
     let jobs = h.ai_jobs();
     assert_eq!(jobs.len(), 1);
     assert!(jobs[0].system.contains("Talk like a pirate."));
-    assert_eq!(jobs[0].prompt, "a: hello\nb: @Pirate hi");
+    assert!(jobs[0].prompt.contains("a: hello\nb: @Pirate hi"));
 }
 
 #[test]

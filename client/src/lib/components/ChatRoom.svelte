@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ActiveRoom, Group, Message, RoomEvent } from "$lib/types";
   import { avatarFill, initial } from "$lib/avatar";
+  import { createBot, removeBot } from "$lib/chatApi";
   import Icon from "./Icon.svelte";
 
   let {
@@ -40,6 +41,17 @@
   let inputEl: HTMLTextAreaElement | undefined = $state();
   let membersOpen = $state(false);
   let membersEl: HTMLDivElement | undefined = $state();
+  let botName = $state("");
+  let botPersonality = $state("");
+
+  // Server errors (limit, name taken) come back as chat-error toasts.
+  async function addBot(event: Event) {
+    event.preventDefault();
+    if (!group || !botName.trim() || !botPersonality.trim()) return;
+    await createBot(group.id, botName, botPersonality);
+    botName = "";
+    botPersonality = "";
+  }
 
   // At most one typing signal per throttle window; the receiver's lease is longer.
   const TYPING_THROTTLE_MS = 2000;
@@ -256,7 +268,34 @@
                         >{/if}
                     </li>
                   {/each}
+                  {#each group.bots as bot (bot)}
+                    <li>
+                      <span class="av sm" style:background={avatarFill(bot)}
+                        >{initial(bot)}</span
+                      >
+                      <span class="name">{bot}</span>
+                      <span class="tag">bot</span>
+                      {#if group.creator === currentUser}
+                        <button
+                          type="button"
+                          class="ghost danger"
+                          onclick={() => removeBot(group.id, bot)}>Remove</button
+                        >
+                      {/if}
+                    </li>
+                  {/each}
                 </ul>
+                {#if group.creator === currentUser && group.bots.length < 3}
+                  <form class="bot-form" onsubmit={addBot}>
+                    <input placeholder="Bot name" bind:value={botName} />
+                    <textarea
+                      placeholder="Personality, e.g. You are a pirate. Talk like one."
+                      maxlength="500"
+                      bind:value={botPersonality}
+                    ></textarea>
+                    <button type="submit" class="ghost">Add bot</button>
+                  </form>
+                {/if}
               </div>
             {/if}
           </div>
@@ -310,6 +349,9 @@
                     <strong>{message.sender}</strong>
                     {#if message.sender === currentUser}<span class="you"
                         >you</span
+                      >{/if}
+                    {#if group?.bots.includes(message.sender)}<span class="you"
+                        >bot</span
                       >{/if}
                     <time>{formatTime(message.timestamp)}</time>
                   </header>
@@ -503,6 +545,13 @@
   .tag {
     font-size: 11px;
     color: var(--faint);
+  }
+
+  .bot-form {
+    display: grid;
+    gap: 6px;
+    padding: 6px;
+    border-top: 1px solid var(--line-strong);
   }
 
   .window {

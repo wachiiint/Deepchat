@@ -38,6 +38,7 @@ pub struct Group {
     pub name: String,
     pub creator: String,
     pub members: Vec<String>,
+    pub bots: Vec<String>,
 }
 
 impl From<GroupInfo> for Group {
@@ -47,6 +48,7 @@ impl From<GroupInfo> for Group {
             name: info.group,
             creator: info.creator,
             members: info.members,
+            bots: info.bots,
         }
     }
 }

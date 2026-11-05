@@ -109,6 +109,36 @@ async fn delete_group(group_id: String, state: State<'_, ChatState>) -> Result<(
 }
 
 #[tauri::command]
+async fn create_bot(
+    group_id: String,
+    name: String,
+    personality: String,
+    state: State<'_, ChatState>,
+) -> Result<(), String> {
+    connection(&state)?
+        .send(ClientMsg::CreateBot {
+            group: connection::group_name(&group_id)?,
+            name: name.trim().to_owned(),
+            personality: personality.trim().to_owned(),
+        })
+        .await
+}
+
+#[tauri::command]
+async fn remove_bot(
+    group_id: String,
+    name: String,
+    state: State<'_, ChatState>,
+) -> Result<(), String> {
+    connection(&state)?
+        .send(ClientMsg::RemoveBot {
+            group: connection::group_name(&group_id)?,
+            name,
+        })
+        .await
+}
+
+#[tauri::command]
 fn open_private(peer: String, state: State<'_, ChatState>) -> Result<String, String> {
     connection(&state)?.open_private(&peer)
 }
@@ -166,6 +196,8 @@ pub fn run() {
             join_group,
             leave_group,
             delete_group,
+            create_bot,
+            remove_bot,
             open_private,
             send_message,
             send_typing,

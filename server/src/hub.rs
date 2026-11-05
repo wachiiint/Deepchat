@@ -187,21 +187,33 @@ fn group_msg(state: &mut State, id: ConnId, me: String, group: String, text: Str
         state.send(member_id, msg.clone());
     }
     state.record(&group, &me, &text);
-    state.ask_bot(&group, &text);
+    // "Pirate is typing…" while the LLM works; the reply clears it on the client
+    if let Some(bot) = state.ask_bot(&group, &text) {
+        let room = RoomRef::Group {
+            group: group.clone(),
+        };
+        let msg = ServerMsg::Typing { room, from: bot };
+        for member_id in members_of(state, &group) {
+            state.send(member_id, msg.clone());
+        }
+    }
+}
+
+fn members_of(state: &State, group: &str) -> Vec<ConnId> {
+    let members = state.members(group).into_iter().flatten();
+    members.filter_map(|m| state.id_of(m)).collect()
 }
 
 // Same delivery as a member's message, so R11 (members only) holds for bots too.
 // Not passed to `ask_bot`, so bots never trigger each other.
 fn bot_reply(state: &mut State, group: String, bot: String, text: String) {
-    let Some(members) = state.members(&group) else {
-        return; // group deleted while the bot was thinking
-    };
     let msg = ServerMsg::GroupMsg {
         group: group.clone(),
         from: bot.clone(),
         text: text.clone(),
     };
-    for member_id in members.iter().filter_map(|m| state.id_of(m)) {
+    // empty if the group was deleted while the bot was thinking
+    for member_id in members_of(state, &group) {
         state.send(member_id, msg.clone());
     }
     state.record(&group, &bot, &text);

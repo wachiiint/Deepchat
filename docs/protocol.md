@@ -29,6 +29,8 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 | 7 | `LeaveGroup` | `group` |
 | 8 | `DeleteGroup` | `group` |
 | 9 | `Typing` | `room` ([`RoomRef`](#roomref)) |
+| 10 | `CreateBot` | `group`, `name`, `personality` |
+| 11 | `RemoveBot` | `group`, `name` |
 
 ## Server → Client (`ServerMsg`)
 
@@ -38,7 +40,7 @@ Client ↔ server over raw TCP. Both sides depend on one shared definition.
 | 1 | `Welcome` | `name` |
 | 2 | `Users` | `names` (includes the receiver) |
 | 3 | `Dm` | `from`, `to`, `text` |
-| 4 | `Groups` | list of (`group`, `creator`, `members`) |
+| 4 | `Groups` | list of (`group`, `creator`, `members`, `bots`) |
 | 5 | `GroupMsg` | `group`, `from`, `text` |
 | 6 | `Error` | `kind` (see below) |
 | 7 | `GroupDeleted` | `group` |
@@ -63,7 +65,9 @@ Names a room without a derived id. Used by `Typing` in both directions.
 | `GroupExists` | `CreateGroup` with a name that is already in use |
 | `UnknownGroup` | `JoinGroup`, `LeaveGroup`, `DeleteGroup` or `GroupMsg` for a group that does not exist |
 | `NotMember` | `LeaveGroup` or `GroupMsg` by someone who is not in the group |
-| `NotCreator` | `DeleteGroup` by someone who did not create the group |
+| `NotCreator` | `DeleteGroup`, `CreateBot` or `RemoveBot` by someone who did not create the group |
+| `BotLimit` | `CreateBot` when the group already has 3 bots, or the personality is over 500 characters |
+| `BotNameTaken` | `CreateBot` with a name already used by a bot in that group or by a connected user |
 
 ## Behavior
 
@@ -78,4 +82,5 @@ Names a room without a derived id. Used by `Typing` in both directions.
 | Group delete | Only the creator may send `DeleteGroup`, even after leaving the group. Members at that moment, plus the creator, get `GroupDeleted`, then everyone gets the
 new `Groups` |
 | Typing | `Typing` is a transient signal: relayed to the other participants, never echoed to the sender, never stored, no "stopped typing" message (the receiving client expires the indicator). DM: relayed to the target if connected. Group: relayed to every member except the sender, only if the sender is a member. Signals never produce `Error`: an offline target, unknown group, non-member sender and typing to yourself are dropped silently. The only error is `NotRegistered` before `Register`, as for every message |
+| Bots (F10) | Only the group creator adds or removes bots. Bot names go out in `Groups`; the personality never leaves the server. A `GroupMsg` starting with `@<bot>` (exact case) makes that bot answer: members get `Typing` from the bot, then its reply as a normal `GroupMsg` with `from` = bot name. Bot replies never trigger other bots. If the AI fails, the reply text is `(bot unavailable: …)`. Bots disappear with their group. Removing an unknown bot is a no-op |
 | Liveness | Server sends `Ping` periodically; client replies `Pong`. Server closes a connection that goes silent. Timings: `server-architecture.md` |
