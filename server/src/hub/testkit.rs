@@ -38,6 +38,11 @@ impl Harness {
         apply(&mut self.state, ev);
     }
 
+    /// AI calls the hub queued since the last call (`hub::run` would spawn these).
+    pub fn ai_jobs(&mut self) -> Vec<crate::state::AiJob> {
+        std::mem::take(&mut self.state.ai_jobs)
+    }
+
     /// `Event::Connect` only: the client has no name yet.
     pub fn connect(&mut self) -> Client {
         let id = self.next_id;

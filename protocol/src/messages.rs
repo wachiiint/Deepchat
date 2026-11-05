@@ -5,15 +5,42 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClientMsg {
     Pong,
-    Register { name: String },
-    Dm { to: String, text: String },
-    CreateGroup { group: String },
+    Register {
+        name: String,
+    },
+    Dm {
+        to: String,
+        text: String,
+    },
+    CreateGroup {
+        group: String,
+    },
     ListGroups,
-    JoinGroup { group: String },
-    GroupMsg { group: String, text: String },
-    LeaveGroup { group: String },
-    DeleteGroup { group: String },
-    Typing { room: RoomRef },
+    JoinGroup {
+        group: String,
+    },
+    GroupMsg {
+        group: String,
+        text: String,
+    },
+    LeaveGroup {
+        group: String,
+    },
+    DeleteGroup {
+        group: String,
+    },
+    Typing {
+        room: RoomRef,
+    },
+    CreateBot {
+        group: String,
+        name: String,
+        personality: String,
+    },
+    RemoveBot {
+        group: String,
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,6 +82,7 @@ pub struct GroupInfo {
     pub group: String,
     pub creator: String,
     pub members: Vec<String>,
+    pub bots: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,4 +100,6 @@ pub enum ErrorKind {
     UnknownGroup,
     NotMember,
     NotCreator,
+    BotLimit,
+    BotNameTaken,
 }

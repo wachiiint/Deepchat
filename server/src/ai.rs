@@ -10,16 +10,9 @@ const DEFAULT_URL: &str = "http://localhost:11434/v1";
 const DEFAULT_MODEL: &str = "llama3.2:1b";
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Debug)]
-pub enum AiError {
-    Timeout,
-    Request(aisdk::Error),
-    Empty,
-}
-
 /// One bot reply. `system` is the bot's personality, `prompt` the conversation so far.
 /// Config: `DEEPCHAT_AI_URL`, `DEEPCHAT_AI_MODEL`.
-pub async fn complete(system: &str, prompt: &str) -> Result<String, AiError> {
+pub async fn complete(system: &str, prompt: &str) -> Result<String, String> {
     let url = std::env::var("DEEPCHAT_AI_URL").unwrap_or_else(|_| DEFAULT_URL.into());
     let model = std::env::var("DEEPCHAT_AI_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.into());
 
@@ -28,7 +21,7 @@ pub async fn complete(system: &str, prompt: &str) -> Result<String, AiError> {
         .api_key("unused") // Ollama ignores it
         .model_name(model)
         .build()
-        .map_err(AiError::Request)?;
+        .map_err(|e| e.to_string())?;
 
     let mut request = LanguageModelRequest::builder()
         .model(provider)
@@ -38,10 +31,10 @@ pub async fn complete(system: &str, prompt: &str) -> Result<String, AiError> {
 
     let response = tokio::time::timeout(TIMEOUT, request.generate_text())
         .await
-        .map_err(|_| AiError::Timeout)?
-        .map_err(AiError::Request)?;
+        .map_err(|_| "timeout".to_string())?
+        .map_err(|e| e.to_string())?;
 
-    response.text().ok_or(AiError::Empty)
+    response.text().ok_or("empty reply".to_string())
 }
 
 #[cfg(test)]
