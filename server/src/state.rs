@@ -16,7 +16,7 @@ struct Conn {
 }
 
 pub const MAX_BOTS: usize = 3;
-pub const MAX_PERSONALITY: usize = 500; // characters
+pub const MAX_PERSONALITY_DESC: usize = 500;
 const HISTORY: usize = 50; // group lines a bot sees
 
 struct Group {
@@ -142,7 +142,7 @@ impl State {
         if info.bots.contains_key(&name) || self.names.contains_key(&name) {
             return Err(ErrorKind::BotNameTaken);
         }
-        if info.bots.len() >= MAX_BOTS || personality.chars().count() > MAX_PERSONALITY {
+        if info.bots.len() >= MAX_BOTS || personality.chars().count() > MAX_PERSONALITY_DESC {
             return Err(ErrorKind::BotLimit);
         }
         info.bots.insert(name, personality);
@@ -287,8 +287,8 @@ mod bot_tests {
     #[test]
     fn personality_length_limit() {
         let mut s = state();
-        let ok = "x".repeat(MAX_PERSONALITY);
-        let long = "x".repeat(MAX_PERSONALITY + 1);
+        let ok = "x".repeat(MAX_PERSONALITY_DESC);
+        let long = "x".repeat(MAX_PERSONALITY_DESC + 1);
         assert_eq!(s.create_bot("g", "a", "Ok".into(), ok), Ok(()));
         assert_eq!(
             s.create_bot("g", "a", "Long".into(), long),
