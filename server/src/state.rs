@@ -47,9 +47,15 @@ pub struct State {
     // - `spawn_ai`: cap concurrent calls (per bot, or a global Semaphore).
     // - `bot_reply`: skip if the bot/group is gone; don't `record` "(bot unavailable)" errors.
     pub ai_jobs: Vec<AiJob>,
+    next_msg_id: u64,
 }
 
 impl State {
+    pub fn alloc_msg_id(&mut self) -> u64 {
+        self.next_msg_id += 1;
+        self.next_msg_id
+    }
+
     pub fn connect(&mut self, id: ConnId, tx: Outbox) {
         self.conns.insert(id, Conn { tx, name: None });
     }

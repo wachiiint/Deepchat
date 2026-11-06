@@ -12,6 +12,8 @@ export type Message = {
   sender: string;
   text: string;
   timestamp: number;
+  peer: string | null;
+  readers: string[];
 };
 
 // Someone typed in a room. The room id matches `Message.roomId`.
@@ -42,3 +44,5 @@ export type ActiveRoom = {
   kind: RoomKind;
   title: string;
 };
+
+export type ReadReceipt = { roomId: string; by: string; upto: string };

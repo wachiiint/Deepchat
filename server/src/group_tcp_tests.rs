@@ -110,6 +110,7 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     )
     .await;
     let message = ServerMsg::GroupMsg {
+        id: 1,
         group: "g1".into(),
         from: "A".into(),
         text: "hello 🌏".into(),
@@ -179,6 +180,86 @@ async fn three_clients_create_join_chat_leave_disconnect_and_recreate_over_tcp()
     assert!(next_groups(&mut a).await.is_empty());
 
     drop(a);
+    drop(c);
+    accept_task.abort();
+    hub_task.abort();
+}
+
+#[tokio::test]
+async fn message_ids_and_exact_read_watermarks_round_trip_over_tcp() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (hub_tx, hub_rx) = mpsc::channel(32);
+    let hub_task = tokio::spawn(hub::run(hub_tx.downgrade(), hub_rx));
+    let accept_task = tokio::spawn(async move {
+        let mut id = 0;
+        while let Ok((socket, peer)) = listener.accept().await {
+            tokio::spawn(session::run(
+                socket,
+                peer,
+                id,
+                hub_tx.clone(),
+                session::Liveness::DEFAULT,
+            ));
+            id += 1;
+        }
+    });
+    let mut a = register(addr, "A").await;
+    let mut b = register(addr, "B").await;
+    let mut c = register(addr, "C").await;
+    for socket in [&mut a, &mut b, &mut c] {
+        list(socket).await;
+    }
+    send(
+        &mut a,
+        ClientMsg::Dm {
+            to: "B".into(),
+            text: "first".into(),
+        },
+    )
+    .await;
+    let first = receive(&mut a).await;
+    assert_eq!(first, receive(&mut b).await);
+    let ServerMsg::Dm { id: first_id, .. } = first else {
+        panic!("expected DM")
+    };
+    send(
+        &mut a,
+        ClientMsg::Dm {
+            to: "B".into(),
+            text: "second".into(),
+        },
+    )
+    .await;
+    let second = receive(&mut a).await;
+    assert_eq!(second, receive(&mut b).await);
+    let ServerMsg::Dm { id: second_id, .. } = second else {
+        panic!("expected DM")
+    };
+    assert!(first_id < second_id);
+    send(
+        &mut b,
+        ClientMsg::Read {
+            room: protocol::RoomRef::Dm { to: "A".into() },
+            upto: first_id,
+        },
+    )
+    .await;
+    assert_eq!(
+        receive(&mut a).await,
+        ServerMsg::Read {
+            room: protocol::RoomRef::Dm { to: "B".into() },
+            by: "B".into(),
+            upto: first_id
+        }
+    );
+    // Barriers prove that neither the reader nor outsider received the receipt.
+    for socket in [&mut b, &mut c] {
+        send(socket, ClientMsg::ListGroups).await;
+        assert!(matches!(receive(socket).await, ServerMsg::Groups { .. }));
+    }
+    drop(a);
+    drop(b);
     drop(c);
     accept_task.abort();
     hub_task.abort();

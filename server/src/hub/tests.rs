@@ -114,8 +114,8 @@ fn dm_reaches_only_sender_and_receiver() {
     let mut h = Harness::default();
     let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
     h.send(&a, dm("b", "hi"));
-    assert_eq!(a.drain(), [got_dm("a", "b", "hi")]);
-    assert_eq!(b.drain(), [got_dm("a", "b", "hi")]);
+    assert_eq!(a.drain(), [got_dm("a", "b", "hi", 1)]);
+    assert_eq!(b.drain(), [got_dm("a", "b", "hi", 1)]);
     c.assert_silent();
 }
 
@@ -124,7 +124,7 @@ fn dm_to_self_delivers_once() {
     let mut h = Harness::default();
     let [mut a] = h.join(["a"]);
     h.send(&a, dm("a", "me"));
-    assert_eq!(a.drain(), [got_dm("a", "a", "me")]);
+    assert_eq!(a.drain(), [got_dm("a", "a", "me", 1)]);
 }
 
 #[test]
@@ -152,7 +152,10 @@ fn dm_order_preserved() {
     let [a, mut b] = h.join(["a", "b"]);
     h.send(&a, dm("b", "1"));
     h.send(&a, dm("b", "2"));
-    assert_eq!(b.drain(), [got_dm("a", "b", "1"), got_dm("a", "b", "2")]);
+    assert_eq!(
+        b.drain(),
+        [got_dm("a", "b", "1", 1), got_dm("a", "b", "2", 2)]
+    );
 }
 
 // --- Disconnect ---
@@ -192,7 +195,7 @@ fn dead_outbox_does_not_block_others() {
     let [mut a, b, mut c] = h.join(["a", "b", "c"]);
     drop(b); // writer task gone, Disconnect not processed yet
     h.send(&a, dm("b", "hi"));
-    assert_eq!(a.drain(), [got_dm("a", "b", "hi")]);
+    assert_eq!(a.drain(), [got_dm("a", "b", "hi", 1)]);
     h.register("d");
     // don't pin whether the dead `b` is still listed, only that live clients are served
     let lists_d =
@@ -335,6 +338,7 @@ fn messages_reach_only_members_including_sender() {
     c.drain();
     h.send(&a, say("g1", "hello"));
     let msg = ServerMsg::GroupMsg {
+        id: 1,
         group: "g1".into(),
         from: "a".into(),
         text: "hello".into(),
@@ -620,6 +624,7 @@ fn bot_reply_reaches_members_only() {
         text: "Arr!".into(),
     });
     let reply = ServerMsg::GroupMsg {
+        id: 1,
         group: "g1".into(),
         from: "Pirate".into(),
         text: "Arr!".into(),

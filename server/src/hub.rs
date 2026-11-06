@@ -1,6 +1,8 @@
 //! Single task that owns `State` and applies chat rules. Sessions talk to it via `Event`s.
 
 #[cfg(test)]
+mod read_tests;
+#[cfg(test)]
 mod testkit;
 #[cfg(test)]
 mod tests;
@@ -74,9 +76,10 @@ fn apply(state: &mut State, ev: Event) {
 
 fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
     let Some(me) = state.name_of(id).map(str::to_owned) else {
-        // before a name is set, only Register is allowed
+        // Before registration, accept Register and silently ignore read receipts.
         match msg {
             ClientMsg::Register { name } => register(state, id, name),
+            ClientMsg::Read { .. } => {}
             _ => reject(state, id, ErrorKind::NotRegistered),
         }
         return;
@@ -85,6 +88,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
     match msg {
         ClientMsg::Register { .. } | ClientMsg::Pong => {}
         ClientMsg::Dm { to, text } => dm(state, id, me, to, text),
+        ClientMsg::Read { room, upto } => relay_read(state, id, me, room, upto),
         ClientMsg::ListGroups => state.send(
             id,
             ServerMsg::Groups {
@@ -125,11 +129,16 @@ fn register(state: &mut State, id: ConnId, name: String) {
 }
 
 // only sender and receiver get it; the sender's copy confirms delivery
-fn dm(state: &State, from_id: ConnId, from: String, to: String, text: String) {
+fn dm(state: &mut State, from_id: ConnId, from: String, to: String, text: String) {
     let Some(to_id) = state.id_of(&to) else {
         return reject(state, from_id, ErrorKind::UnknownUser);
     };
-    let msg = ServerMsg::Dm { from, to, text };
+    let msg = ServerMsg::Dm {
+        id: state.alloc_msg_id(),
+        from,
+        to,
+        text,
+    };
     if to_id != from_id {
         state.send(to_id, msg.clone());
     }
@@ -175,10 +184,12 @@ fn delete_group(state: &mut State, id: ConnId, me: &str, group: String) {
 // members only; the sender's copy confirms delivery
 fn group_msg(state: &mut State, id: ConnId, me: String, group: String, text: String) {
     let members = match state.members_for(&group, &me) {
-        Ok(members) => members,
+        Ok(members) => members.clone(),
         Err(kind) => return reject(state, id, kind),
     };
+    let message_id = state.alloc_msg_id();
     let msg = ServerMsg::GroupMsg {
+        id: message_id,
         group: group.clone(),
         from: me.clone(),
         text: text.clone(),
@@ -207,7 +218,9 @@ fn members_of(state: &State, group: &str) -> Vec<ConnId> {
 // Same delivery as a member's message, so R11 (members only) holds for bots too.
 // Not passed to `ask_bot`, so bots never trigger each other.
 fn bot_reply(state: &mut State, group: String, bot: String, text: String) {
+    let message_id = state.alloc_msg_id();
     let msg = ServerMsg::GroupMsg {
+        id: message_id,
         group: group.clone(),
         from: bot.clone(),
         text: text.clone(),
@@ -263,4 +276,36 @@ fn broadcast_groups(state: &State) {
     state.broadcast(&ServerMsg::Groups {
         groups: state.group_list(),
     });
+}
+
+fn relay_read(state: &State, reader_id: ConnId, by: String, room: RoomRef, upto: u64) {
+    match room {
+        RoomRef::Dm { to: with } if with != by => {
+            if let Some(peer_id) = state.id_of(&with) {
+                state.send(
+                    peer_id,
+                    ServerMsg::Read {
+                        room: RoomRef::Dm { to: by.clone() },
+                        by,
+                        upto,
+                    },
+                );
+            }
+        }
+        RoomRef::Group { group } => {
+            if let Ok(info) = state.members_for(&group, &by) {
+                let msg = ServerMsg::Read {
+                    room: RoomRef::Group { group },
+                    by,
+                    upto,
+                };
+                for name in info {
+                    if let Some(id) = state.id_of(name).filter(|id| *id != reader_id) {
+                        state.send(id, msg.clone());
+                    }
+                }
+            }
+        }
+        RoomRef::Dm { .. } => {}
+    }
 }

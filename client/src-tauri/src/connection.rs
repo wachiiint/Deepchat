@@ -27,6 +27,15 @@ pub enum Update {
     Typing(Typing),
     Error(String),
     Disconnected(String),
+    Read(ReadReceipt),
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadReceipt {
+    pub room_id: String,
+    pub by: String,
+    pub upto: String,
 }
 
 type Notify = Arc<dyn Fn(Update) + Send + Sync>;
@@ -61,6 +70,8 @@ pub struct Message {
     pub sender: String,
     pub text: String,
     pub timestamp: u64,
+    pub peer: Option<String>,
+    pub readers: Vec<String>,
 }
 
 /// Someone started or kept typing in a room. The frontend owns expiry.
@@ -82,7 +93,6 @@ struct Model {
     snapshot: Snapshot,
     messages: HashMap<String, Vec<Message>>,
     peers: HashMap<String, String>,
-    next_id: u64,
 }
 
 pub struct Connection {
@@ -151,7 +161,7 @@ impl Model {
                 });
                 notify(Update::Groups(self.snapshot.groups.clone()));
             }
-            ServerMsg::Dm { from, to, text } => {
+            ServerMsg::Dm { id, from, to, text } => {
                 let room = private_id(&from, &to);
                 let peer = if from == self.snapshot.name {
                     to
@@ -159,15 +169,42 @@ impl Model {
                     from.clone()
                 };
                 self.peers.insert(room.clone(), peer);
-                self.receive(room, from, text, notify);
+                self.receive(id, room, from, text, notify);
             }
-            ServerMsg::GroupMsg { group, from, text } => {
-                self.receive(format!("group:{group}"), from, text, notify);
+            ServerMsg::GroupMsg {
+                id,
+                group,
+                from,
+                text,
+            } => {
+                self.receive(id, format!("group:{group}"), from, text, notify);
             }
             ServerMsg::GroupDeleted { group } => {
                 let room = format!("group:{group}");
                 self.messages.remove(&room);
                 notify(Update::GroupDeleted(room));
+            }
+            ServerMsg::Read { room, by, upto } => {
+                let room_id = match room {
+                    RoomRef::Dm { to: with } => private_id(&self.snapshot.name, &with),
+                    RoomRef::Group { group } => format!("group:{group}"),
+                };
+                if by != self.snapshot.name {
+                    for message in self.messages.entry(room_id.clone()).or_default() {
+                        if message.sender == self.snapshot.name
+                            && message.id.parse::<u64>().is_ok_and(|id| id <= upto)
+                            && !message.readers.contains(&by)
+                        {
+                            message.readers.push(by.clone());
+                            message.readers.sort();
+                        }
+                    }
+                    notify(Update::Read(ReadReceipt {
+                        room_id,
+                        by,
+                        upto: upto.to_string(),
+                    }));
+                }
             }
             ServerMsg::Error { kind } => {
                 notify(Update::Error(error_text(kind).into()));
@@ -201,10 +238,19 @@ impl Model {
             })
     }
 
-    fn receive(&mut self, room_id: String, sender: String, text: String, notify: &Notify) {
-        self.next_id += 1;
+    fn receive(&mut self, id: u64, room_id: String, sender: String, text: String, notify: &Notify) {
+        let id = id.to_string();
+        if self
+            .messages
+            .get(&room_id)
+            .is_some_and(|messages| messages.iter().any(|m| m.id == id))
+        {
+            return;
+        }
         let message = Message {
-            id: self.next_id.to_string(),
+            id,
+            peer: self.peers.get(&room_id).cloned(),
+            readers: Vec::new(),
             room_id: room_id.clone(),
             sender,
             text,
@@ -281,7 +327,6 @@ impl Connection {
             snapshot: snapshot.clone(),
             messages: HashMap::new(),
             peers: HashMap::new(),
-            next_id: 0,
         }));
 
         // frames that arrived during the handshake are replayed, not lost
@@ -431,6 +476,33 @@ impl Connection {
         }
         Ok(model.messages.get(room).cloned().unwrap_or_default())
     }
+    pub fn read_request(&self, room_id: &str, upto: u64) -> Result<Option<ClientMsg>, String> {
+        let model = self.model.lock().map_err(|e| e.to_string())?;
+        let latest = model
+            .messages
+            .get(room_id)
+            .and_then(|messages| messages.last())
+            .and_then(|message| message.id.parse::<u64>().ok())
+            .unwrap_or(0);
+        let upto = upto.min(latest);
+        if upto == 0 {
+            return Ok(None);
+        }
+        let room = if let Some(peer) = model.peers.get(room_id) {
+            RoomRef::Dm { to: peer.clone() }
+        } else {
+            let group = model
+                .snapshot
+                .groups
+                .iter()
+                .find(|g| g.id == room_id && g.members.contains(&model.snapshot.name))
+                .ok_or(error_text(ErrorKind::NotMember))?;
+            RoomRef::Group {
+                group: group.name.clone(),
+            }
+        };
+        Ok(Some(ClientMsg::Read { room, upto }))
+    }
 }
 
 #[cfg(test)]
@@ -473,6 +545,7 @@ mod tests {
             write_frame(
                 &mut socket,
                 &ServerMsg::Dm {
+                    id: 1,
                     from: "peer".into(),
                     to: "me".into(),
                     text: "early".into(),
@@ -517,6 +590,7 @@ mod tests {
             write_frame(
                 &mut socket,
                 &ServerMsg::GroupMsg {
+                    id: 1,
                     group: "g1".into(),
                     from: "me".into(),
                     text: "hi".into(),
@@ -643,10 +717,14 @@ mod tests {
             );
             // Wait until the client has checked that nothing was added locally.
             checked_rx.await.unwrap();
-            for (from, to, text) in [("me", "peer", "yo"), ("peer", "me", "hey")] {
+            for (index, (from, to, text)) in [("me", "peer", "yo"), ("peer", "me", "hey")]
+                .into_iter()
+                .enumerate()
+            {
                 write_frame(
                     &mut socket,
                     &ServerMsg::Dm {
+                        id: index as u64 + 1,
                         from: from.into(),
                         to: to.into(),
                         text: text.into(),
@@ -711,7 +789,6 @@ mod tests {
             },
             messages: HashMap::new(),
             peers: HashMap::new(),
-            next_id: 0,
         };
         let deleted = Arc::new(Mutex::new(Vec::new()));
         let log = deleted.clone();
@@ -720,7 +797,7 @@ mod tests {
                 log.lock().unwrap().push(room);
             }
         });
-        model.receive("group:g1".into(), "peer".into(), "hi".into(), &notify);
+        model.receive(1, "group:g1".into(), "peer".into(), "hi".into(), &notify);
         assert!(model.messages.contains_key("group:g1"));
         model.apply(ServerMsg::GroupDeleted { group: "g1".into() }, &notify);
         assert!(!model.messages.contains_key("group:g1"));
@@ -736,7 +813,6 @@ mod tests {
             },
             messages: HashMap::new(),
             peers: HashMap::new(),
-            next_id: 0,
         }
     }
 
@@ -807,5 +883,62 @@ mod tests {
         assert_eq!(model.typing("group:out"), None, "not a member");
         assert_eq!(model.typing("group:nope"), None, "unknown group");
         assert_eq!(model.typing(&private_id("me", "zed")), None, "unopened DM");
+    }
+    #[test]
+    fn receipts_mark_only_received_own_messages_and_preserve_u64_precision() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let notify: Notify = Arc::new(move |event| {
+            tx.send(event).unwrap();
+        });
+        let mut model = Model {
+            snapshot: Snapshot {
+                name: "me".into(),
+                users: vec![],
+                groups: vec![],
+            },
+            messages: HashMap::new(),
+            peers: HashMap::new(),
+        };
+        for id in [u64::MAX - 2, u64::MAX - 1] {
+            model.apply(
+                ServerMsg::Dm {
+                    id,
+                    from: "me".into(),
+                    to: "peer".into(),
+                    text: "hi".into(),
+                },
+                &notify,
+            );
+            let Update::Message(message) = rx.try_recv().unwrap() else {
+                panic!("expected message")
+            };
+            assert_eq!(message.id, id.to_string());
+            assert_eq!(message.peer.as_deref(), Some("peer"));
+        }
+        let receipt = ServerMsg::Read {
+            room: RoomRef::Dm { to: "peer".into() },
+            by: "peer".into(),
+            upto: u64::MAX - 2,
+        };
+        model.apply(receipt.clone(), &notify);
+        let Update::Read(read) = rx.try_recv().unwrap() else {
+            panic!("expected receipt")
+        };
+        assert_eq!(read.upto, (u64::MAX - 2).to_string());
+        assert_eq!(read.room_id, private_id("me", "peer"));
+        model.apply(receipt, &notify);
+        let messages = &model.messages[&read.room_id];
+        assert_eq!(messages[0].readers, ["peer"]);
+        assert!(messages[1].readers.is_empty());
+        model.apply(
+            ServerMsg::Dm {
+                id: u64::MAX,
+                from: "me".into(),
+                to: "peer".into(),
+                text: "newer".into(),
+            },
+            &notify,
+        );
+        assert!(model.messages[&read.room_id][2].readers.is_empty());
     }
 }

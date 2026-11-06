@@ -2,6 +2,7 @@
   import type { ActiveRoom, Group, Message, RoomEvent } from "$lib/types";
   import { avatarFill, initial } from "$lib/avatar";
   import { createBot, removeBot } from "$lib/chatApi";
+  import { newestSeen } from "$lib/readState";
   import Icon from "./Icon.svelte";
 
   let {
@@ -36,6 +37,7 @@
     oneditdraft: () => void;
   } = $props();
 
+  const seen = $derived(newestSeen(messages, currentUser));
   let draft = $state("");
   let windowEl: HTMLDivElement | undefined = $state();
   let inputEl: HTMLTextAreaElement | undefined = $state();
@@ -378,6 +380,15 @@
                   </header>
                 {/if}
                 <p>{message.text}</p>
+                {#if seen?.id === message.id}
+                  <p class="read-receipt" aria-live="polite">
+                    {room.kind === "private"
+                      ? "Seen"
+                      : message.readers.length > 3
+                        ? `Seen by ${message.readers.length}`
+                        : `Seen by ${message.readers.join(", ")}`}
+                  </p>
+                {/if}
               </div>
             </article>
           {/if}
@@ -707,6 +718,11 @@
     color: var(--text);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  .body .read-receipt {
+    font-size: 12px;
+    color: var(--mute);
   }
 
   .empty-msg {

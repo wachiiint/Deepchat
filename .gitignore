@@ -10,3 +10,8 @@ temp
 .impeccable/mocks/
 .impeccable/questions/
 .impeccable/config.local.json
+
+# Private local configuration
+.env
+.env.*
+!.env.example

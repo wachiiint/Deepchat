@@ -110,3 +110,13 @@ Clients MUST answer every `Ping`, or they are dropped after 30 s idle.
 - SQLite / CRUD repositories
 - HTTP or WebSockets for chat
 - Mixing framing and hub logic in `main.rs`
+
+## Read / unread (F11)
+
+The hub allocates a single monotonically increasing `u64` id for each accepted DM, group message and bot reply. Rejected messages consume no id. The counter starts at 1 and resets with the server. Both copies of a DM share its id.
+
+`Read { room, upto }` is relayed only to the online DM peer or the other current group members as `Read { room, by, upto }`. Invalid/unregistered readers are silently ignored. The hub never stores read state. Existing Ollama bot requests, personalities and typing behavior are unchanged.
+
+The desktop cache retains reader names on received own messages. IDs cross desktop IPC as decimal strings to preserve all 64 bits in JavaScript. The frontend keeps per-room unread counts and read watermarks in memory, sends receipts only for the focused open room, clears badges on reading, and shows Seen or Seen by under the latest read own message. Leaving/deleting groups clears their read state; reconnecting resets all counts.
+
+Rebuild both server and client together: the added message-id fields change the postcard payload, while existing variant indexes stay the same.

@@ -51,6 +51,9 @@ async fn connect(
         connection::Update::Error(message) => {
             let _ = app.emit("chat-error", message);
         }
+        connection::Update::Read(receipt) => {
+            let _ = app.emit("read-receipt", receipt);
+        }
         connection::Update::Disconnected(message) => {
             let _ = app.emit("disconnected", message);
         }
@@ -182,6 +185,22 @@ fn disconnect(state: State<'_, ChatState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn mark_read(
+    room_id: String,
+    upto: String,
+    state: State<'_, ChatState>,
+) -> Result<(), String> {
+    let connection = connection(&state)?;
+    let upto = upto
+        .parse::<u64>()
+        .map_err(|_| "Invalid message id".to_owned())?;
+    if let Some(request) = connection.read_request(&room_id, upto)? {
+        connection.send(request).await?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -201,7 +220,8 @@ pub fn run() {
             open_private,
             send_message,
             send_typing,
-            get_messages
+            get_messages,
+            mark_read
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
