@@ -57,6 +57,13 @@ pnpm install
 pnpm tauri dev
 ```
 
+# Testing for dev
+Spawn 2 client + 1 server
+```bash
+chmod +x dev.sh
+./dev.sh
+```
+
 ## AI model: local ollama
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh   # install Ollama for linux if not installed

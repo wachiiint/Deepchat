@@ -16,6 +16,7 @@ const ADDR: &str = "0.0.0.0:7878";
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    dotenvy::dotenv().ok(); // load .env if present; missing is fine
     let listener = TcpListener::bind(ADDR).await?;
     println!("Deepchat! by deepaung, listening on {ADDR}");
 

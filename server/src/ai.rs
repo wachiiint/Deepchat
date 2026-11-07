@@ -11,14 +11,15 @@ const DEFAULT_MODEL: &str = "llama3.2:1b";
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 /// One bot reply. `system` is the bot's personality, `prompt` the conversation so far.
-/// Config: `DEEPCHAT_AI_URL`, `DEEPCHAT_AI_MODEL`.
+/// Config: `DEEPCHAT_AI_URL`, `DEEPCHAT_AI_MODEL`, `DEEPCHAT_AI_KEY`.
 pub async fn complete(system: &str, prompt: &str) -> Result<String, String> {
     let url = std::env::var("DEEPCHAT_AI_URL").unwrap_or_else(|_| DEFAULT_URL.into());
     let model = std::env::var("DEEPCHAT_AI_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.into());
+    let key = std::env::var("DEEPCHAT_AI_KEY").unwrap_or_else(|_| "unused".into()); // Ollama ignores it
 
     let provider = OpenAICompatible::<DynamicModel>::builder()
         .base_url(url)
-        .api_key("unused") // Ollama ignores it
+        .api_key(key)
         .model_name(model)
         .build()
         .map_err(|e| e.to_string())?;
