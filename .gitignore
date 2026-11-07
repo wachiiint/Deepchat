@@ -3,6 +3,7 @@ target/
 
 # developer e.g. add context, spec, temp.txt
 temp
+.env
 
 # impeccable
 .impeccable/review/

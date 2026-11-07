@@ -189,7 +189,28 @@
     }
   }
 
+  // "@par" at the start of the draft suggests full names; the server only reacts to "@bot ...".
+  let mentions = $derived.by(() => {
+    const query = group ? /^@(\S*)$/.exec(draft)?.[1] : undefined;
+    if (query === undefined || !group) return [];
+    const names = [
+      ...group.bots,
+      ...group.members.filter((m) => m !== currentUser),
+    ];
+    return names.filter((n) => n.toLowerCase().startsWith(query.toLowerCase()));
+  });
+
+  function pickMention(name: string) {
+    draft = `@${name} `;
+    inputEl?.focus();
+  }
+
   function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Tab" && mentions.length) {
+      event.preventDefault();
+      pickMention(mentions[0]);
+      return;
+    }
     // Enter sends, Shift+Enter inserts a newline. While an IME is composing
     // (Burmese, CJK), Enter confirms the candidate and must not send.
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -375,6 +396,15 @@
         <p class="send-note">{room.title} is offline.</p>
       {:else if typingLabel}
         <p class="send-note" role="status">{typingLabel}</p>
+      {/if}
+      {#if mentions.length}
+        <div class="mentions">
+          {#each mentions as name (name)}
+            <button type="button" onclick={() => pickMention(name)}
+              >@{name}</button
+            >
+          {/each}
+        </div>
       {/if}
       <div class="box" class:disabled={!canSend}>
         <textarea
@@ -704,6 +734,26 @@
 
   .send-note {
     color: var(--mute);
+  }
+
+  .mentions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 2px 8px;
+  }
+
+  .mentions button {
+    padding: 2px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--raise);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .mentions button:first-child {
+    border-color: var(--accent);
   }
 
   .box {
