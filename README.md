@@ -66,13 +66,24 @@ chmod +x dev.sh
 
 ## AI model: local ollama
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh   # install Ollama for linux if not installed
-ollama pull llama3.2:1b                         # download the model (~1.3 GB)
-# test
+# Install
+curl -fsSL https://ollama.com/install.sh | sh   # install Ollama
+ollama pull llama3.2:1b                         # (~1.3 GB)
+# Test
 cargo test -p server ai -- --ignored --nocapture   # asks Ollama once, prints a pirate reply
-# run
+# Run
 ollama serve # wiring ollama to stand by in memory
 ```
+
+## AI api
+Register
+- Get an account ID: sign up at dash.cloudflare.com. The account ID is shown on the account home page and on the Workers AI page.
+- Get an API token: go to My Profile → API Tokens → Create Token and pick the "Workers AI" template. Copy the token; it's only shown once.
+- Put this in .env, with your account ID in the URL:
+DEEPCHAT_AI_URL=https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1
+DEEPCHAT_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+DEEPCHAT_AI_KEY=<API_TOKEN>
+
 
 ## Repo layout
 

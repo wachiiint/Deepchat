@@ -180,7 +180,7 @@ impl State {
             // Persona repeated after the log: small models otherwise just continue the log.
             prompt: format!(
                 "Group chat so far:\n{}\n\nYou are {bot}. {personality}\n\
-                 Write only {bot}'s short reply to the last message.",
+                 Write only {bot}'s short reply to the last message. Do not start it with @.",
                 Vec::from(info.history.clone()).join("\n")
             ),
         });
