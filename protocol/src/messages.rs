@@ -41,6 +41,10 @@ pub enum ClientMsg {
         group: String,
         name: String,
     },
+    Read {
+        room: RoomRef,
+        upto: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +57,7 @@ pub enum ServerMsg {
         names: Vec<String>,
     },
     Dm {
+        id: u64,
         from: String,
         to: String,
         text: String,
@@ -61,6 +66,7 @@ pub enum ServerMsg {
         groups: Vec<GroupInfo>,
     },
     GroupMsg {
+        id: u64,
         group: String,
         from: String,
         text: String,
@@ -74,6 +80,11 @@ pub enum ServerMsg {
     Typing {
         room: RoomRef,
         from: String,
+    },
+    Read {
+        room: RoomRef,
+        by: String,
+        upto: u64,
     },
 }
 
@@ -102,4 +113,34 @@ pub enum ErrorKind {
     NotCreator,
     BotLimit,
     BotNameTaken,
+}
+
+#[cfg(test)]
+mod read_tests {
+    use super::*;
+    #[test]
+    fn read_receipts_append_to_main_and_preserve_exact_ids() {
+        for room in [
+            RoomRef::Dm { to: "alice".into() },
+            RoomRef::Group { group: "g".into() },
+        ] {
+            let msg = ClientMsg::Read {
+                room: room.clone(),
+                upto: u64::MAX,
+            };
+            let bytes = postcard::to_stdvec(&msg).unwrap();
+            assert_eq!(bytes[0], 12);
+            assert_eq!(postcard::from_bytes::<ClientMsg>(&bytes).unwrap(), msg);
+            let msg = ServerMsg::Read {
+                room,
+                by: "bob".into(),
+                upto: u64::MAX,
+            };
+            let bytes = postcard::to_stdvec(&msg).unwrap();
+            assert_eq!(bytes[0], 9);
+            assert_eq!(postcard::from_bytes::<ServerMsg>(&bytes).unwrap(), msg);
+        }
+        assert_eq!(postcard::to_stdvec(&ClientMsg::Pong).unwrap(), [0]);
+        assert_eq!(postcard::to_stdvec(&ServerMsg::Ping).unwrap(), [0]);
+    }
 }

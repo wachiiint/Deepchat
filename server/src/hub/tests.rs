@@ -114,8 +114,8 @@ fn dm_reaches_only_sender_and_receiver() {
     let mut h = Harness::default();
     let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
     h.send(&a, dm("b", "hi"));
-    assert_eq!(a.drain(), [got_dm("a", "b", "hi")]);
-    assert_eq!(b.drain(), [got_dm("a", "b", "hi")]);
+    assert_eq!(a.drain(), [got_dm("a", "b", "hi", 1)]);
+    assert_eq!(b.drain(), [got_dm("a", "b", "hi", 1)]);
     c.assert_silent();
 }
 
@@ -124,7 +124,7 @@ fn dm_to_self_delivers_once() {
     let mut h = Harness::default();
     let [mut a] = h.join(["a"]);
     h.send(&a, dm("a", "me"));
-    assert_eq!(a.drain(), [got_dm("a", "a", "me")]);
+    assert_eq!(a.drain(), [got_dm("a", "a", "me", 1)]);
 }
 
 #[test]
@@ -152,7 +152,10 @@ fn dm_order_preserved() {
     let [a, mut b] = h.join(["a", "b"]);
     h.send(&a, dm("b", "1"));
     h.send(&a, dm("b", "2"));
-    assert_eq!(b.drain(), [got_dm("a", "b", "1"), got_dm("a", "b", "2")]);
+    assert_eq!(
+        b.drain(),
+        [got_dm("a", "b", "1", 1), got_dm("a", "b", "2", 2)]
+    );
 }
 
 // --- Disconnect ---
@@ -192,7 +195,7 @@ fn dead_outbox_does_not_block_others() {
     let [mut a, b, mut c] = h.join(["a", "b", "c"]);
     drop(b); // writer task gone, Disconnect not processed yet
     h.send(&a, dm("b", "hi"));
-    assert_eq!(a.drain(), [got_dm("a", "b", "hi")]);
+    assert_eq!(a.drain(), [got_dm("a", "b", "hi", 1)]);
     h.register("d");
     // don't pin whether the dead `b` is still listed, only that live clients are served
     let lists_d =
@@ -335,6 +338,7 @@ fn messages_reach_only_members_including_sender() {
     c.drain();
     h.send(&a, say("g1", "hello"));
     let msg = ServerMsg::GroupMsg {
+        id: 1,
         group: "g1".into(),
         from: "a".into(),
         text: "hello".into(),
@@ -620,6 +624,7 @@ fn bot_reply_reaches_members_only() {
         text: "Arr!".into(),
     });
     let reply = ServerMsg::GroupMsg {
+        id: 1,
         group: "g1".into(),
         from: "Pirate".into(),
         text: "Arr!".into(),
@@ -627,4 +632,131 @@ fn bot_reply_reaches_members_only() {
     assert_eq!(a.drain(), vec![reply.clone()]);
     assert_eq!(b.drain(), [reply]);
     c.assert_silent();
+}
+
+// --- Message ids ---
+
+fn msg_ids(msgs: Vec<ServerMsg>) -> Vec<u64> {
+    let ids = msgs.into_iter().filter_map(|m| match m {
+        ServerMsg::Dm { id, .. } | ServerMsg::GroupMsg { id, .. } => Some(id),
+        _ => None,
+    });
+    ids.collect()
+}
+
+#[test]
+fn ids_are_one_sequence_across_dms_groups_and_bot_replies() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = bot_group(&mut h);
+    for client in [&mut a, &mut b, &mut c] {
+        client.drain();
+    }
+    h.send(&a, dm("c", "one"));
+    h.send(&a, say("g1", "two"));
+    h.send(&b, say("g1", "@Pirate hi"));
+    let job = h.ai_jobs().pop().unwrap();
+    h.apply(Event::AiReply {
+        group: job.group,
+        bot: job.bot,
+        text: "Ahoy".into(),
+    });
+    h.send(&a, dm("b", "five"));
+    assert_eq!(msg_ids(a.drain()), [1, 2, 3, 4, 5]);
+}
+
+#[test]
+fn rejected_messages_consume_no_id() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("g1"));
+    for client in [&mut a, &mut b, &mut c] {
+        client.drain();
+    }
+    let mut idle = h.connect();
+    h.send(&idle, dm("a", "rejected")); // not registered
+    h.send(&a, dm("zed", "rejected")); // unknown user
+    h.send(&a, say("missing", "rejected")); // unknown group
+    h.send(&c, say("g1", "rejected")); // not a member
+    h.send(&a, dm("b", "ok"));
+    assert_eq!(b.drain(), [got_dm("a", "b", "ok", 1)]);
+}
+
+// --- Read receipts ---
+
+fn read(room: RoomRef, upto: u64) -> ClientMsg {
+    ClientMsg::Read { room, upto }
+}
+fn dm_room(with: &str) -> RoomRef {
+    RoomRef::Dm { to: with.into() }
+}
+fn group_room(group: &str) -> RoomRef {
+    RoomRef::Group {
+        group: group.into(),
+    }
+}
+
+#[test]
+fn dm_receipt_names_the_reader_as_peer_and_never_echoes() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, dm("b", "hi"));
+    a.drain();
+    b.drain();
+    h.send(&b, read(dm_room("a"), 1));
+    // `room` names the other party, so A sees the room as "b"
+    let receipt = ServerMsg::Read {
+        room: dm_room("b"),
+        by: "b".into(),
+        upto: 1,
+    };
+    assert_eq!(a.drain(), [receipt]);
+    b.assert_silent(); // never echoed
+    c.assert_silent();
+    // self-DM, offline peer, unknown group: silently ignored
+    for room in [dm_room("b"), dm_room("offline"), group_room("missing")] {
+        h.send(&b, read(room, 1));
+    }
+    for client in [&mut a, &mut b, &mut c] {
+        client.assert_silent();
+    }
+    // unregistered reader
+    let mut idle = h.connect();
+    h.send(&idle, read(dm_room("a"), 1));
+    idle.assert_silent();
+    a.assert_silent();
+}
+
+#[test]
+fn group_receipts_reach_other_members_only_and_invalid_readers_are_silent() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c, mut d] = h.join(["a", "b", "c", "d"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    h.send(&c, join_group("g1"));
+    h.send(&a, say("g1", "hi"));
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.drain();
+    }
+    h.send(&b, read(group_room("g1"), 1));
+    let expected = ServerMsg::Read {
+        room: group_room("g1"),
+        by: "b".into(),
+        upto: 1,
+    };
+    assert_eq!(a.drain(), std::slice::from_ref(&expected));
+    assert_eq!(c.drain(), [expected]);
+    b.assert_silent(); // never echoed
+    d.assert_silent(); // non-member
+    h.send(&d, read(group_room("g1"), 1)); // non-member reader
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.assert_silent();
+    }
+    h.send(&b, leave("g1"));
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.drain();
+    }
+    h.send(&b, read(group_room("g1"), 1)); // left the group
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.assert_silent();
+    }
 }

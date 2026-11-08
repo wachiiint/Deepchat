@@ -2,7 +2,13 @@
   import { onMount } from "svelte";
   import type { UnlistenFn } from "@tauri-apps/api/event";
   import * as chatApi from "$lib/chatApi";
-  import type { ActiveRoom, Group, Message, RoomEvent } from "$lib/types";
+  import type {
+    ActiveRoom,
+    Group,
+    Message,
+    RoomEvent,
+    ReadReceipt,
+  } from "$lib/types";
   import { avatarFill, initial } from "$lib/avatar";
   import { toasts } from "$lib/toasts.svelte";
   import { typing } from "$lib/typing.svelte";
@@ -16,6 +22,8 @@
   import Toasts from "$lib/components/Toasts.svelte";
   import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
   import Icon from "$lib/components/Icon.svelte";
+
+  import { ReadState, applyReceipt, mergeMessages } from "$lib/readState";
 
   let connected = $state(false);
   let currentUser = $state("");
@@ -37,9 +45,55 @@
   let createError = $state("");
   let sendError = $state("");
 
+  const readState = new ReadState();
+  let unread = $state<Record<string, number>>({});
+  let dmRooms = $state<Record<string, string>>({});
+  let focused = $state(false);
+  const pendingReads = new Map<string, string>();
+  const roomLoads = new Map<string, ReadReceipt[]>();
+  let roomLoadRevision = 0;
+  let unreadByPeer = $derived(
+    Object.fromEntries(
+      Object.entries(dmRooms).map(([peer, room]) => [peer, unread[room] ?? 0]),
+    ),
+  );
+
+  function updateUnread() {
+    unread = readState.counts();
+    const total = Object.values(unread).reduce((sum, count) => sum + count, 0);
+    void chatApi.setUnreadTitle(total).catch((e) => {
+      report(e);
+    });
+  }
+
+  function resetReadState() {
+    readState.reset();
+    pendingReads.clear();
+    dmRooms = {};
+    updateUnread();
+  }
+
+  async function markVisibleRead() {
+    if (!activeRoom || !connected) return;
+    const roomId = activeRoom.id;
+    const upto = readState.visible(roomId, focused);
+    updateUnread();
+    if (!upto || BigInt(pendingReads.get(roomId) ?? "0") >= BigInt(upto))
+      return;
+    const revision = disconnectRevision;
+    pendingReads.set(roomId, upto);
+    try {
+      await chatApi.markRead(roomId, upto);
+      if (revision === disconnectRevision) readState.acknowledge(roomId, upto);
+    } catch (e) {
+      report(e);
+    } finally {
+      if (pendingReads.get(roomId) === upto) pendingReads.delete(roomId);
+    }
+  }
   // Unread counts for rooms that are not open: groups by room id, private chats by peer name.
-  let groupUnread = $state<Record<string, number>>({});
-  let peerUnread = $state<Record<string, number>>({});
+  const groupUnread = $derived(unread);
+  const peerUnread = $derived(unreadByPeer);
   // Join/leave notices per group id, derived by diffing group snapshots. Never persisted.
   let roomEvents = $state<Record<string, RoomEvent[]>>({});
   let nextEventId = 1;
@@ -78,6 +132,8 @@
   );
 
   function closeRoom() {
+    roomLoadRevision++;
+    roomLoads.clear();
     activeRoom = null;
     selectedGroupId = null;
     selectedPeer = null;
@@ -99,8 +155,7 @@
     closeRoom();
     users = [];
     groups = [];
-    groupUnread = {};
-    peerUnread = {};
+    resetReadState();
     roomEvents = {};
     typing.clearAll();
     createOpen = false;
@@ -116,7 +171,14 @@
       selectedGroupId === id
     )
       closeRoom();
-    delete groupUnread[id];
+    readState.retainGroups(
+      new Set(
+        groups
+          .filter((g) => g.id !== id && g.members.includes(currentUser))
+          .map((g) => g.id),
+      ),
+    );
+    updateUnread();
     delete roomEvents[id];
     typing.clearRoom(id);
     if (deleteTarget?.id === id) deleteTarget = null;
@@ -178,11 +240,12 @@
     }
     if (deleteTarget && !next.some((g) => g.id === deleteTarget?.id))
       deleteTarget = null;
-    // Unread counts only make sense for groups we are still in.
-    for (const id of Object.keys(groupUnread)) {
-      if (!next.some((g) => g.id === id && g.members.includes(currentUser)))
-        delete groupUnread[id];
-    }
+    readState.retainGroups(
+      new Set(
+        next.filter((g) => g.members.includes(currentUser)).map((g) => g.id),
+      ),
+    );
+    updateUnread();
     const joined = next.find(
       (g) => g.name === pendingGroup && g.members.includes(currentUser),
     );
@@ -201,6 +264,14 @@
 
     listenersReady = (async () => {
       const offs = await Promise.all([
+        chatApi.watchFocus((next) => {
+          focused = next;
+          if (next) void markVisibleRead();
+        }),
+        chatApi.onReadReceipt((receipt) => {
+          roomLoads.get(receipt.roomId)?.push(receipt);
+          messages = applyReceipt(messages, receipt, currentUser);
+        }),
         chatApi.onUsersUpdated((next) => {
           usersRevision++;
           users = next;
@@ -235,21 +306,22 @@
           disconnectNotice = message;
         }),
         chatApi.onMessageReceived((message) => {
-          // A sent message ends that person's "typing" at once.
           typing.clear(message.roomId, message.sender);
+          if (message.peer)
+            dmRooms = { ...dmRooms, [message.peer]: message.roomId };
+          readState.receive(
+            message,
+            currentUser,
+            activeRoom?.id ?? null,
+            focused,
+          );
+          updateUnread();
           if (activeRoom && message.roomId === activeRoom.id) {
             if (!messages.some((m) => m.id === message.id)) {
               messages = [...messages, message];
             }
-          } else if (message.sender !== currentUser) {
-            if (message.roomId.startsWith("dm:")) {
-              peerUnread[message.sender] =
-                (peerUnread[message.sender] ?? 0) + 1;
-            } else {
-              groupUnread[message.roomId] =
-                (groupUnread[message.roomId] ?? 0) + 1;
-            }
           }
+          if (activeRoom?.id === message.roomId) void markVisibleRead();
         }),
         chatApi.onTyping(({ roomId, from }) => {
           if (from !== currentUser) typing.note(roomId, from);
@@ -262,8 +334,11 @@
       unlisteners = offs;
     })();
 
+    void listenersReady.catch(report);
+
     return () => {
       cancelled = true;
+      void chatApi.setUnreadTitle(0).catch(() => {});
       unlisteners.forEach((off) => off());
     };
   });
@@ -276,6 +351,7 @@
     try {
       await listenersReady;
       currentUser = payload.name;
+      resetReadState();
       const initialDisconnectRevision = disconnectRevision;
       const initialUsersRevision = usersRevision;
       const initialGroupsRevision = groupsRevision;
@@ -297,12 +373,23 @@
   }
 
   async function loadMessages(roomId: string) {
-    const history = await chatApi.getMessages(roomId);
-    if (activeRoom?.id === roomId) {
-      const byId = new Map(history.map((message) => [message.id, message]));
-      for (const message of messages)
-        if (message.roomId === roomId) byId.set(message.id, message);
-      messages = [...byId.values()];
+    const revision = ++roomLoadRevision;
+    const receipts: ReadReceipt[] = [];
+    roomLoads.set(roomId, receipts);
+    try {
+      const history = await chatApi.getMessages(roomId);
+      if (activeRoom?.id === roomId && revision === roomLoadRevision) {
+        messages = mergeMessages(
+          history,
+          messages.filter((message) => message.roomId === roomId),
+          receipts,
+          currentUser,
+        );
+        readState.observeHistory(roomId, messages);
+        await markVisibleRead();
+      }
+    } finally {
+      if (roomLoads.get(roomId) === receipts) roomLoads.delete(roomId);
     }
   }
 
@@ -315,7 +402,7 @@
       closeRoom();
       selectedPeer = peer;
       activeRoom = { id: roomId, kind: "private", title: peer };
-      delete peerUnread[peer];
+      dmRooms = { ...dmRooms, [peer]: roomId };
       await loadMessages(roomId);
     } catch (e) {
       report(e);
@@ -336,7 +423,7 @@
       closeRoom();
       selectedGroupId = group.id;
       activeRoom = { id: group.id, kind: "group", title: group.name };
-      delete groupUnread[group.id];
+
       await loadMessages(group.id);
     } catch (e) {
       report(e);
@@ -424,6 +511,7 @@
   async function handleDisconnect() {
     try {
       await chatApi.disconnect();
+      disconnectRevision++;
       resetSession();
     } catch (e) {
       report(e);

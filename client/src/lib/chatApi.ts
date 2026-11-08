@@ -1,6 +1,13 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ConnectResult, Group, Message, TypingEvent } from "./types";
+import type {
+  ConnectResult,
+  Group,
+  Message,
+  TypingEvent,
+  ReadReceipt,
+} from "./types";
 
 export async function connect(
   host: string,
@@ -106,4 +113,39 @@ export function onTyping(
   handler: (typing: TypingEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<TypingEvent>("typing", (event) => handler(event.payload));
+}
+
+export async function markRead(roomId: string, upto: string): Promise<void> {
+  return invoke("mark_read", { roomId, upto });
+}
+
+export function onReadReceipt(
+  handler: (receipt: ReadReceipt) => void,
+): Promise<UnlistenFn> {
+  return listen<ReadReceipt>("read-receipt", (event) => handler(event.payload));
+}
+
+export async function watchFocus(
+  handler: (focused: boolean) => void,
+): Promise<UnlistenFn> {
+  const appWindow = getCurrentWindow();
+  let revision = 0;
+  const off = await appWindow.onFocusChanged(({ payload }) => {
+    revision++;
+    handler(payload);
+  });
+  try {
+    const focused = await appWindow.isFocused();
+    if (revision === 0) handler(focused);
+  } catch (error) {
+    off();
+    throw error;
+  }
+  return off;
+}
+
+export async function setUnreadTitle(total: number): Promise<void> {
+  const title = total ? `Deepchat (${total})` : "Deepchat";
+  document.title = title;
+  await getCurrentWindow().setTitle(title);
 }

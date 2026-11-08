@@ -8,7 +8,7 @@
 //! let mut h = Harness::default();
 //! let [mut a, mut b, mut c] = h.join(["a", "b", "c"]); // registered, queues cleared
 //! h.send(&a, dm("b", "hi"));
-//! assert_eq!(b.drain(), [got_dm("a", "b", "hi")]);
+//! assert_eq!(b.drain(), [got_dm("a", "b", "hi", 1)]);
 //! c.assert_silent();
 //! ```
 //!
@@ -116,8 +116,9 @@ pub fn users(names: &[&str]) -> ServerMsg {
     }
 }
 
-pub fn got_dm(from: &str, to: &str, text: &str) -> ServerMsg {
+pub fn got_dm(from: &str, to: &str, text: &str, id: u64) -> ServerMsg {
     ServerMsg::Dm {
+        id,
         from: from.into(),
         to: to.into(),
         text: text.into(),
