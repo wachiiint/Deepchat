@@ -5,7 +5,9 @@ mod testkit;
 #[cfg(test)]
 mod tests;
 
-use tokio::sync::mpsc;
+use std::sync::Arc;
+
+use tokio::sync::{Semaphore, mpsc};
 
 use crate::ai;
 use crate::state::{AiJob, ConnId, Outbox, State};
@@ -27,27 +29,31 @@ pub enum Event {
     AiReply {
         group: String,
         bot: String,
-        text: String,
+        text: Result<String, String>,
     },
 }
+
+/// At most this many LLM calls in flight; extra mentions wait their turn.
+const MAX_AI_CALLS: usize = 4;
 
 /// `tx` is weak so the hub's own handle does not keep the channel open forever.
 pub async fn run(tx: mpsc::WeakSender<Event>, mut rx: mpsc::Receiver<Event>) {
     let mut state = State::default();
+    let limit = Arc::new(Semaphore::new(MAX_AI_CALLS));
     while let Some(ev) = rx.recv().await {
-        apply(&mut state, ev);
-        for job in state.ai_jobs.drain(..) {
-            spawn_ai(job, tx.clone());
+        if let Some(job) = apply(&mut state, ev) {
+            spawn_ai(job, tx.clone(), limit.clone());
         }
     }
 }
 
 // The LLM takes seconds, so it runs on its own task; the hub never waits for it.
-fn spawn_ai(job: AiJob, tx: mpsc::WeakSender<Event>) {
+fn spawn_ai(job: AiJob, tx: mpsc::WeakSender<Event>, limit: Arc<Semaphore>) {
     tokio::spawn(async move {
-        let text = ai::complete(&job.system, &job.prompt)
-            .await
-            .unwrap_or_else(|e| format!("(bot unavailable: {e})"));
+        let Ok(_permit) = limit.acquire().await else {
+            return; // semaphore closed: the hub is gone
+        };
+        let text = ai::complete(&job.system, &job.prompt).await;
         if let Some(tx) = tx.upgrade() {
             let (group, bot) = (job.group, job.bot);
             let _ = tx.send(Event::AiReply { group, bot, text }).await;
@@ -56,10 +62,11 @@ fn spawn_ai(job: AiJob, tx: mpsc::WeakSender<Event>) {
 }
 
 /// One hub step. Synchronous so tests can drive it without a runtime (see `testkit`).
-fn apply(state: &mut State, ev: Event) {
+/// Returns the LLM call to start, if a message mentioned a bot.
+fn apply(state: &mut State, ev: Event) -> Option<AiJob> {
     match ev {
         Event::Connect { id, tx } => state.connect(id, tx),
-        Event::Msg { id, msg } => handle(state, id, msg),
+        Event::Msg { id, msg } => return handle(state, id, msg),
         Event::Disconnect { id } => {
             if let Some(name) = state.disconnect(id) {
                 broadcast_users(state);
@@ -70,9 +77,10 @@ fn apply(state: &mut State, ev: Event) {
         }
         Event::AiReply { group, bot, text } => bot_reply(state, group, bot, text),
     }
+    None
 }
 
-fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
+fn handle(state: &mut State, id: ConnId, msg: ClientMsg) -> Option<AiJob> {
     let Some(me) = state.name_of(id).map(str::to_owned) else {
         // Before registration, accept Register and silently ignore read receipts.
         match msg {
@@ -80,7 +88,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
             ClientMsg::Read { .. } => {}
             _ => reject(state, id, ErrorKind::NotRegistered),
         }
-        return;
+        return None;
     };
 
     match msg {
@@ -97,7 +105,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
         ClientMsg::JoinGroup { group } => join_group(state, id, me, group),
         ClientMsg::LeaveGroup { group } => leave_group(state, id, &me, &group),
         ClientMsg::DeleteGroup { group } => delete_group(state, id, &me, group),
-        ClientMsg::GroupMsg { group, text } => group_msg(state, id, me, group, text),
+        ClientMsg::GroupMsg { group, text } => return group_msg(state, id, me, group, text),
         ClientMsg::Typing { room } => typing(state, id, me, room),
         // bot names reach clients inside the Groups broadcast
         ClientMsg::CreateBot {
@@ -114,6 +122,7 @@ fn handle(state: &mut State, id: ConnId, msg: ClientMsg) {
             Err(kind) => reject(state, id, kind),
         },
     }
+    None
 }
 
 fn register(state: &mut State, id: ConnId, name: String) {
@@ -180,10 +189,19 @@ fn delete_group(state: &mut State, id: ConnId, me: &str, group: String) {
 }
 
 // members only; the sender's copy confirms delivery
-fn group_msg(state: &mut State, id: ConnId, me: String, group: String, text: String) {
+fn group_msg(
+    state: &mut State,
+    id: ConnId,
+    me: String,
+    group: String,
+    text: String,
+) -> Option<AiJob> {
     let members = match state.members_for(&group, &me) {
         Ok(members) => members.clone(),
-        Err(kind) => return reject(state, id, kind),
+        Err(kind) => {
+            reject(state, id, kind);
+            return None;
+        }
     };
     let message_id = state.alloc_msg_id();
     let msg = ServerMsg::GroupMsg {
@@ -197,15 +215,16 @@ fn group_msg(state: &mut State, id: ConnId, me: String, group: String, text: Str
     }
     state.record(&group, &me, &text);
     // "Pirate is typing…" while the LLM works; the reply clears it on the client
-    if let Some(bot) = state.ask_bot(&group, &text) {
-        let room = RoomRef::Group {
-            group: group.clone(),
-        };
-        let msg = ServerMsg::Typing { room, from: bot };
-        for member_id in members_of(state, &group) {
-            state.send(member_id, msg.clone());
-        }
+    let job = state.ask_bot(&group, &text)?;
+    let room = RoomRef::Group { group };
+    let msg = ServerMsg::Typing {
+        room,
+        from: job.bot.clone(),
+    };
+    for member_id in members_of(state, &job.group) {
+        state.send(member_id, msg.clone());
     }
+    Some(job)
 }
 
 fn members_of(state: &State, group: &str) -> Vec<ConnId> {
@@ -215,7 +234,13 @@ fn members_of(state: &State, group: &str) -> Vec<ConnId> {
 
 // Same delivery as a member's message, so R11 (members only) holds for bots too.
 // Not passed to `ask_bot`, so bots never trigger each other.
-fn bot_reply(state: &mut State, group: String, bot: String, text: String) {
+// Errors are shown to members but kept out of history, so they never reach the next prompt.
+fn bot_reply(state: &mut State, group: String, bot: String, text: Result<String, String>) {
+    if !state.has_bot(&group, &bot) {
+        return;
+    }
+    let ok = text.is_ok();
+    let text = text.unwrap_or_else(|e| format!("(bot unavailable: {e})"));
     let message_id = state.alloc_msg_id();
     let msg = ServerMsg::GroupMsg {
         id: message_id,
@@ -223,11 +248,12 @@ fn bot_reply(state: &mut State, group: String, bot: String, text: String) {
         from: bot.clone(),
         text: text.clone(),
     };
-    // empty if the group was deleted while the bot was thinking
     for member_id in members_of(state, &group) {
         state.send(member_id, msg.clone());
     }
-    state.record(&group, &bot, &text);
+    if ok {
+        state.record(&group, &bot, &text);
+    }
 }
 
 // Transient signal: relayed to the other participants, never echoed, never stored.

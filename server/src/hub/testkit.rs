@@ -16,7 +16,7 @@
 //! Use `register` instead of `join` to assert on the `Welcome`/`Users` replies.
 
 use super::{Event, apply};
-use crate::state::{ConnId, State};
+use crate::state::{AiJob, ConnId, State};
 use protocol::{ClientMsg, ErrorKind, RoomRef, ServerMsg};
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 
@@ -24,6 +24,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver};
 pub struct Harness {
     state: State,
     next_id: ConnId,
+    jobs: Vec<AiJob>,
 }
 
 /// A fake connection. Dropping it closes its outbox, like a dead writer task.
@@ -35,12 +36,12 @@ pub struct Client {
 impl Harness {
     /// Feed any event, e.g. `Event::Disconnect` for an id that never connected.
     pub fn apply(&mut self, ev: Event) {
-        apply(&mut self.state, ev);
+        self.jobs.extend(apply(&mut self.state, ev));
     }
 
-    /// AI calls the hub queued since the last call (`hub::run` would spawn these).
-    pub fn ai_jobs(&mut self) -> Vec<crate::state::AiJob> {
-        std::mem::take(&mut self.state.ai_jobs)
+    /// AI calls `apply` returned since the last call (`hub::run` would spawn these).
+    pub fn ai_jobs(&mut self) -> Vec<AiJob> {
+        std::mem::take(&mut self.jobs)
     }
 
     /// `Event::Connect` only: the client has no name yet.
