@@ -621,7 +621,7 @@ fn bot_reply_reaches_members_only() {
     h.apply(Event::AiReply {
         group: "g1".into(),
         bot: "Pirate".into(),
-        text: "Arr!".into(),
+        text: Ok("Arr!".into()),
     });
     let reply = ServerMsg::GroupMsg {
         id: 1,
@@ -632,6 +632,44 @@ fn bot_reply_reaches_members_only() {
     assert_eq!(a.drain(), vec![reply.clone()]);
     assert_eq!(b.drain(), [reply]);
     c.assert_silent();
+}
+
+#[test]
+fn reply_from_removed_bot_is_dropped() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = bot_group(&mut h);
+    let remove = ClientMsg::RemoveBot {
+        group: "g1".into(),
+        name: "Pirate".into(),
+    };
+    h.send(&a, remove);
+    for client in [&mut a, &mut b, &mut c] {
+        client.drain();
+    }
+    h.apply(Event::AiReply {
+        group: "g1".into(),
+        bot: "Pirate".into(),
+        text: Ok("Arr!".into()),
+    });
+    a.assert_silent();
+    b.assert_silent();
+}
+
+#[test]
+fn bot_error_is_shown_but_not_remembered() {
+    let mut h = Harness::default();
+    let [mut a, b, _c] = bot_group(&mut h);
+    a.drain();
+    h.apply(Event::AiReply {
+        group: "g1".into(),
+        bot: "Pirate".into(),
+        text: Err("timeout".into()),
+    });
+    assert!(
+        matches!(&a.drain()[..], [ServerMsg::GroupMsg { text, .. }] if text.contains("timeout"))
+    );
+    h.send(&b, say("g1", "@Pirate hi"));
+    assert!(!h.ai_jobs()[0].prompt.contains("timeout"));
 }
 
 // --- Message ids ---
@@ -658,7 +696,7 @@ fn ids_are_one_sequence_across_dms_groups_and_bot_replies() {
     h.apply(Event::AiReply {
         group: job.group,
         bot: job.bot,
-        text: "Ahoy".into(),
+        text: Ok("Ahoy".into()),
     });
     h.send(&a, dm("b", "five"));
     assert_eq!(msg_ids(a.drain()), [1, 2, 3, 4, 5]);

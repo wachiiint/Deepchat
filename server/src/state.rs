@@ -26,7 +26,7 @@ struct Group {
     history: VecDeque<String>,      // "from: text", newest last
 }
 
-/// A bot reply to fetch from the LLM. The hub queues it; `hub::run` spawns the call.
+/// A bot reply to fetch from the LLM. `hub::apply` returns it; `hub::run` spawns the call.
 #[derive(Debug)]
 pub struct AiJob {
     pub group: String,
@@ -40,13 +40,6 @@ pub struct State {
     conns: HashMap<ConnId, Conn>,
     names: HashMap<String, ConnId>,
     groups: HashMap<String, Group>,
-    // TODO(ai):
-    // - Drop this pub queue (State must not feed the hub, which owns it): make
-    //   `ask_bot(&self) -> Option<AiJob>` and have `hub::apply` return the job to `run`.
-    // - `ask_bot`: join history via `iter()`, not `Vec::from(history.clone())`.
-    // - `spawn_ai`: cap concurrent calls (per bot, or a global Semaphore).
-    // - `bot_reply`: skip if the bot/group is gone; don't `record` "(bot unavailable)" errors.
-    pub ai_jobs: Vec<AiJob>,
     next_msg_id: u64,
 }
 
@@ -180,12 +173,12 @@ impl State {
         }
     }
 
-    /// If `text` starts with `@<bot>` of this group, queue an AI job and return the bot.
-    pub fn ask_bot(&mut self, group: &str, text: &str) -> Option<String> {
+    /// If `text` starts with `@<bot>` of this group, the AI job for that bot.
+    pub fn ask_bot(&self, group: &str, text: &str) -> Option<AiJob> {
         let info = self.groups.get(group)?;
         let mention = text.strip_prefix('@')?.split_whitespace().next()?;
         let (bot, personality) = info.bots.get_key_value(mention)?;
-        self.ai_jobs.push(AiJob {
+        Some(AiJob {
             group: group.to_owned(),
             bot: bot.clone(),
             system: format!("You are {bot}, a bot in a group chat. {personality}"),
@@ -193,10 +186,20 @@ impl State {
             prompt: format!(
                 "Group chat so far:\n{}\n\nYou are {bot}. {personality}\n\
                  Write only {bot}'s short reply to the last message. Do not start it with @.",
-                Vec::from(info.history.clone()).join("\n")
+                info.history
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join("\n")
             ),
-        });
-        Some(bot.clone())
+        })
+    }
+
+    /// The bot may have been removed, or its group deleted, while the LLM was thinking.
+    pub fn has_bot(&self, group: &str, bot: &str) -> bool {
+        self.groups
+            .get(group)
+            .is_some_and(|g| g.bots.contains_key(bot))
     }
 
     /// Members of `group`, with no membership check (for bot replies).
