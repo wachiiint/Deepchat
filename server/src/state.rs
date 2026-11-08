@@ -40,6 +40,12 @@ pub struct State {
     conns: HashMap<ConnId, Conn>,
     names: HashMap<String, ConnId>,
     groups: HashMap<String, Group>,
+    // TODO(ai):
+    // - Drop this pub queue (State must not feed the hub, which owns it): make
+    //   `ask_bot(&self) -> Option<AiJob>` and have `hub::apply` return the job to `run`.
+    // - `ask_bot`: join history via `iter()`, not `Vec::from(history.clone())`.
+    // - `spawn_ai`: cap concurrent calls (per bot, or a global Semaphore).
+    // - `bot_reply`: skip if the bot/group is gone; don't `record` "(bot unavailable)" errors.
     pub ai_jobs: Vec<AiJob>,
 }
 
