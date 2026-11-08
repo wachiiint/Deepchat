@@ -672,7 +672,7 @@ fn rejected_messages_consume_no_id() {
     for client in [&mut a, &mut b, &mut c] {
         client.drain();
     }
-    let mut idle = h.connect();
+    let idle = h.connect();
     h.send(&idle, dm("a", "rejected")); // not registered
     h.send(&a, dm("zed", "rejected")); // unknown user
     h.send(&a, say("missing", "rejected")); // unknown group
