@@ -633,3 +633,130 @@ fn bot_reply_reaches_members_only() {
     assert_eq!(b.drain(), [reply]);
     c.assert_silent();
 }
+
+// --- Message ids ---
+
+fn msg_ids(msgs: Vec<ServerMsg>) -> Vec<u64> {
+    let ids = msgs.into_iter().filter_map(|m| match m {
+        ServerMsg::Dm { id, .. } | ServerMsg::GroupMsg { id, .. } => Some(id),
+        _ => None,
+    });
+    ids.collect()
+}
+
+#[test]
+fn ids_are_one_sequence_across_dms_groups_and_bot_replies() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = bot_group(&mut h);
+    for client in [&mut a, &mut b, &mut c] {
+        client.drain();
+    }
+    h.send(&a, dm("c", "one"));
+    h.send(&a, say("g1", "two"));
+    h.send(&b, say("g1", "@Pirate hi"));
+    let job = h.ai_jobs().pop().unwrap();
+    h.apply(Event::AiReply {
+        group: job.group,
+        bot: job.bot,
+        text: "Ahoy".into(),
+    });
+    h.send(&a, dm("b", "five"));
+    assert_eq!(msg_ids(a.drain()), [1, 2, 3, 4, 5]);
+}
+
+#[test]
+fn rejected_messages_consume_no_id() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, create("g1"));
+    for client in [&mut a, &mut b, &mut c] {
+        client.drain();
+    }
+    let mut idle = h.connect();
+    h.send(&idle, dm("a", "rejected")); // not registered
+    h.send(&a, dm("zed", "rejected")); // unknown user
+    h.send(&a, say("missing", "rejected")); // unknown group
+    h.send(&c, say("g1", "rejected")); // not a member
+    h.send(&a, dm("b", "ok"));
+    assert_eq!(b.drain(), [got_dm("a", "b", "ok", 1)]);
+}
+
+// --- Read receipts ---
+
+fn read(room: RoomRef, upto: u64) -> ClientMsg {
+    ClientMsg::Read { room, upto }
+}
+fn dm_room(with: &str) -> RoomRef {
+    RoomRef::Dm { to: with.into() }
+}
+fn group_room(group: &str) -> RoomRef {
+    RoomRef::Group {
+        group: group.into(),
+    }
+}
+
+#[test]
+fn dm_receipt_names_the_reader_as_peer_and_never_echoes() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c] = h.join(["a", "b", "c"]);
+    h.send(&a, dm("b", "hi"));
+    a.drain();
+    b.drain();
+    h.send(&b, read(dm_room("a"), 1));
+    // `room` names the other party, so A sees the room as "b"
+    let receipt = ServerMsg::Read {
+        room: dm_room("b"),
+        by: "b".into(),
+        upto: 1,
+    };
+    assert_eq!(a.drain(), [receipt]);
+    b.assert_silent(); // never echoed
+    c.assert_silent();
+    // self-DM, offline peer, unknown group: silently ignored
+    for room in [dm_room("b"), dm_room("offline"), group_room("missing")] {
+        h.send(&b, read(room, 1));
+    }
+    for client in [&mut a, &mut b, &mut c] {
+        client.assert_silent();
+    }
+    // unregistered reader
+    let mut idle = h.connect();
+    h.send(&idle, read(dm_room("a"), 1));
+    idle.assert_silent();
+    a.assert_silent();
+}
+
+#[test]
+fn group_receipts_reach_other_members_only_and_invalid_readers_are_silent() {
+    let mut h = Harness::default();
+    let [mut a, mut b, mut c, mut d] = h.join(["a", "b", "c", "d"]);
+    h.send(&a, create("g1"));
+    h.send(&b, join_group("g1"));
+    h.send(&c, join_group("g1"));
+    h.send(&a, say("g1", "hi"));
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.drain();
+    }
+    h.send(&b, read(group_room("g1"), 1));
+    let expected = ServerMsg::Read {
+        room: group_room("g1"),
+        by: "b".into(),
+        upto: 1,
+    };
+    assert_eq!(a.drain(), std::slice::from_ref(&expected));
+    assert_eq!(c.drain(), [expected]);
+    b.assert_silent(); // never echoed
+    d.assert_silent(); // non-member
+    h.send(&d, read(group_room("g1"), 1)); // non-member reader
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.assert_silent();
+    }
+    h.send(&b, leave("g1"));
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.drain();
+    }
+    h.send(&b, read(group_room("g1"), 1)); // left the group
+    for client in [&mut a, &mut b, &mut c, &mut d] {
+        client.assert_silent();
+    }
+}

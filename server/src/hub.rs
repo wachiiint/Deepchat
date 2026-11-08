@@ -1,8 +1,6 @@
 //! Single task that owns `State` and applies chat rules. Sessions talk to it via `Event`s.
 
 #[cfg(test)]
-mod read_tests;
-#[cfg(test)]
 mod testkit;
 #[cfg(test)]
 mod tests;
